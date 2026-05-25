@@ -7,6 +7,8 @@ Demo microservices cho website chơi cờ vua online realtime. Scope hiện tạ
 - AI bot chỉ còn một chế độ đơn giản: chọn ngẫu nhiên một nước hợp lệ.
 
 ## Kiến Trúc
+### Kiến trúc Microservice
+<img width="1536" height="1024" alt="1" src="https://github.com/user-attachments/assets/80e44935-22a7-4bd6-a806-cf10505f9516" />
 
 ```text
 Browser React/Vite
