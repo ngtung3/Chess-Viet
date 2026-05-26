@@ -23,7 +23,12 @@ app.get('/health', (_req, res) => res.json({ service, status: 'ok' }));
 app.get('/metrics', (_req, res) => res.type('text/plain').send(`service_up{service="${service}"} 1\n`));
 app.post('/validate', (req, res) => {
   const chess = chessFromFen(req.body.fen);
-  const move = chess.move({ from: req.body.from, to: req.body.to, promotion: req.body.promotion || 'q' });
+  let move = null;
+  try {
+    move = chess.move({ from: req.body.from, to: req.body.to, promotion: req.body.promotion || 'q' });
+  } catch {
+    move = null;
+  }
   res.json({
     legal: !!move,
     fen: move ? chess.fen() : req.body.fen,
@@ -45,7 +50,7 @@ async function main() {
   await consumer.subscribe({ topic: 'move.requested', fromBeginning: false }).catch(() => undefined);
   await consumer.subscribe({ topic: 'game.started', fromBeginning: false }).catch(() => undefined);
   await consumer.subscribe({ topic: 'game.finished', fromBeginning: false }).catch(() => undefined);
-  await consumer.run({
+  consumer.run({
     eachMessage: async ({ topic, message }) => {
       if (!message.value) return;
       const event = JSON.parse(message.value.toString());
@@ -60,7 +65,12 @@ async function main() {
       }
 
       const chess = event.fen ? chessFromFen(event.fen) : boards.get(gameId) || new Chess();
-      const move = chess.move({ from: event.from, to: event.to, promotion: event.promotion || 'q' });
+      let move = null;
+      try {
+        move = chess.move({ from: event.from, to: event.to, promotion: event.promotion || 'q' });
+      } catch {
+        move = null;
+      }
       if (!move) {
         await publish('move.rejected', gameId, { ...event, gameId, reason: 'illegal_move' });
         return;
@@ -80,7 +90,7 @@ async function main() {
         gameOver: chess.isGameOver()
       });
     }
-  }).catch(() => undefined);
+  }).catch(console.warn);
   app.listen(port, () => console.log(`${service} listening on ${port}`));
 }
 main().catch((error) => { console.error(error); process.exit(1); });

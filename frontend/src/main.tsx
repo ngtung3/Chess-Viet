@@ -4,8 +4,6 @@ import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { io } from 'socket.io-client';
 import { Bell, Bot, Clock, Eye, Flag, Handshake, History, MessageSquare, Swords, Users, Wifi } from 'lucide-react';
-import { Login } from './components/Login';
-import { Register } from './components/Register';
 import './styles.css';
 
 const api = import.meta.env.VITE_API_URL || '/api';
@@ -28,6 +26,19 @@ type PresenceState = {
   players: PresencePerson[];
   spectators: PresencePerson[];
 };
+type MoveTrackerItem = {
+  moveNumber: number;
+  playerId?: string;
+  from: string;
+  to: string;
+  san: string;
+  fen: string;
+  check?: boolean;
+  checkmate?: boolean;
+  status?: string;
+  whiteTimeMs?: number;
+  blackTimeMs?: number;
+};
 
 function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -45,9 +56,7 @@ function emptyPresence(gameId: string): PresenceState {
 }
 
 function normalizePresence(payload: any, fallbackGameId: string): PresenceState {
-  if (typeof payload === 'number') {
-    return { ...emptyPresence(fallbackGameId), total: payload };
-  }
+  if (typeof payload === 'number') return { ...emptyPresence(fallbackGameId), total: payload };
   return {
     gameId: payload?.gameId || fallbackGameId,
     total: Number(payload?.total || 0),
@@ -66,11 +75,169 @@ function displayPresenceName(person?: PresencePerson | null) {
   return person.connections && person.connections > 1 ? `${base} (${person.connections})` : base;
 }
 
+function materialScore(fen: string) {
+  const values: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+  const board = fen.split(' ')[0];
+  let score = 0;
+  for (const piece of board) {
+    const value = values[piece.toLowerCase()];
+    if (!value) continue;
+    score += piece === piece.toUpperCase() ? value : -value;
+  }
+  return score;
+}
+
+function formatEval(score: number) {
+  if (score === 0) return '0.0';
+  return `${score > 0 ? '+' : ''}${score.toFixed(1)}`;
+}
+
+function AuthScreen({
+  onLogin,
+  onRegister,
+  onDemo
+}: {
+  onLogin: (token: string, user: User) => void;
+  onRegister: (token: string, user: User) => void;
+  onDemo: () => Promise<void>;
+}) {
+  const heroChess = useMemo(() => new Chess(), []);
+  const [fen, setFen] = useState(heroChess.fen());
+  const [tab, setTab] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [boardWidth, setBoardWidth] = useState(520);
+
+  useEffect(() => {
+    const resize = () => {
+      const desktop = Math.min(window.innerWidth * 0.44, 520);
+      const mobile = Math.min(window.innerWidth - 48, 360);
+      setBoardWidth(Math.max(220, Math.floor(window.innerWidth < 760 ? mobile : desktop)));
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (heroChess.isGameOver()) heroChess.reset();
+      const moves = heroChess.moves();
+      const move = moves[Math.floor(Math.random() * moves.length)];
+      if (move) heroChess.move(move);
+      setFen(heroChess.fen());
+    }, 900);
+    return () => window.clearInterval(timer);
+  }, [heroChess]);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+    if (tab === 'register' && password !== confirmPassword) {
+      setError('Mật khẩu xác nhận không khớp');
+      return;
+    }
+    setLoading(true);
+    try {
+      const email = username.includes('@') ? username : `${username.trim()}@chess-viet.local`;
+      const path = tab === 'login' ? '/auth/login' : '/auth/register';
+      const body = tab === 'login' ? { email, password } : { username, email, password };
+      const response = await fetch(`${api}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const auth = await response.json();
+      localStorage.setItem('token', auth.token);
+      localStorage.setItem('user', JSON.stringify(auth.user));
+      tab === 'login' ? onLogin(auth.token, auth.user) : onRegister(auth.token, auth.user);
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="auth-v2">
+      <section className="auth-v2-hero">
+        <div className="brand-lockup">
+          <strong>♟ Chess Viet</strong>
+          <span>Hệ thống phân tán · Realtime</span>
+        </div>
+        <div className="hero-board">
+          <Chessboard
+            position={fen}
+            boardWidth={boardWidth}
+            arePiecesDraggable={false}
+            customDarkSquareStyle={{ backgroundColor: '#779556' }}
+            customLightSquareStyle={{ backgroundColor: '#ebecd0' }}
+          />
+        </div>
+      </section>
+
+      <section className="auth-v2-panel">
+        <form className="auth-v2-form" onSubmit={submit}>
+          <h1>Chơi cờ vua online</h1>
+          <p>Cùng hàng ngàn người chơi realtime</p>
+
+          <div className="auth-v2-tabs">
+            <span style={{ left: tab === 'login' ? '0%' : '50%' }} />
+            <button type="button" className={tab === 'login' ? 'active' : ''} onClick={() => setTab('login')}>
+              Đăng nhập
+            </button>
+            <button type="button" className={tab === 'register' ? 'active' : ''} onClick={() => setTab('register')}>
+              Đăng ký
+            </button>
+          </div>
+
+          <input
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder={tab === 'login' ? 'Email hoặc tên đăng nhập' : 'Tên đăng nhập'}
+            required
+          />
+          <input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Mật khẩu"
+            type="password"
+            required
+          />
+          {tab === 'register' && (
+            <input
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="Xác nhận mật khẩu"
+              type="password"
+              required
+            />
+          )}
+
+          <button className="auth-v2-submit" disabled={loading}>
+            {loading ? 'Đang xử lý...' : tab === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+          </button>
+
+          {error && <div className="error-message">{error}</div>}
+
+          <div className="auth-v2-divider"><span />hoặc<span /></div>
+          <button type="button" className="auth-v2-secondary" onClick={() => void onDemo()}>
+            Chơi bằng tài khoản demo
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
 function App() {
   const chess = useMemo(() => new Chess(), []);
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState<User | null>(JSON.parse(localStorage.getItem('user') || 'null'));
-  const [showAuth, setShowAuth] = useState<'login' | 'register'>('login');
   const [fen, setFen] = useState(chess.fen());
   const [pgn, setPgn] = useState('');
   const [gameId, setGameId] = useState('demo-room');
@@ -78,6 +245,8 @@ function App() {
   const [history, setHistory] = useState<any[]>([]);
   const [replay, setReplay] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [moveTracker, setMoveTracker] = useState<MoveTrackerItem[]>([]);
   const [connected, setConnected] = useState(socket.connected);
   const [whiteTimeMs, setWhiteTimeMs] = useState(300000);
   const [blackTimeMs, setBlackTimeMs] = useState(300000);
@@ -86,10 +255,19 @@ function App() {
   const [matchmakingStatus, setMatchmakingStatus] = useState('Ready');
   const [searching, setSearching] = useState(false);
   const [presence, setPresence] = useState<PresenceState>(emptyPresence(gameId));
+  const [playerColor, setPlayerColor] = useState<'white' | 'black' | 'spectator'>('white');
   const gameIdRef = useRef(gameId);
+  const gameStatusRef = useRef(gameStatus);
+
+  useEffect(() => {
+    gameStatusRef.current = gameStatus;
+  }, [gameStatus]);
 
   async function request(path: string, options: RequestInit = {}) {
-    const res = await fetch(`${api}${path}`, { ...options, headers: { ...(token ? authHeaders(token) : { 'Content-Type': 'application/json' }), ...(options.headers || {}) } });
+    const res = await fetch(`${api}${path}`, {
+      ...options,
+      headers: { ...(token ? authHeaders(token) : { 'Content-Type': 'application/json' }), ...(options.headers || {}) }
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   }
@@ -97,31 +275,27 @@ function App() {
   async function demoLogin() {
     const suffix = Math.floor(Math.random() * 100000);
     const payload = { username: `demo${suffix}`, email: `demo${suffix}@chess.local`, password: '123456' };
-    const auth = await fetch(`${api}/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then((r) => r.json());
+    const auth = await fetch(`${api}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then((r) => r.json());
     localStorage.setItem('token', auth.token);
     localStorage.setItem('user', JSON.stringify(auth.user));
     setToken(auth.token);
     setUser(auth.user);
   }
 
-  const handleLogin = (authToken: string, userData: any) => {
+  const handleAuth = (authToken: string, userData: User) => {
     setToken(authToken);
     setUser(userData);
-  };
-
-  const handleRegister = (authToken: string, userData: any) => {
-    setToken(authToken);
-    setUser(userData);
-  };
-
-  const toggleAuthMode = () => {
-    setShowAuth(showAuth === 'login' ? 'register' : 'login');
   };
 
   function resetBoard() {
     chess.reset();
     setFen(chess.fen());
     setPgn('');
+    setMoveTracker([]);
     setWhiteTimeMs(300000);
     setBlackTimeMs(300000);
     setPresence(emptyPresence(gameIdRef.current));
@@ -135,6 +309,7 @@ function App() {
     setPresence(emptyPresence(nextGameId));
     setWhiteTimeMs(Number(match.initialTimeMs || 300000));
     setBlackTimeMs(Number(match.initialTimeMs || 300000));
+    setPlayerColor(match.color || (match.whiteId === user.id ? 'white' : 'black'));
     setSearching(false);
     setMatchmakingStatus(`Matched as ${match.color || (match.whiteId === user.id ? 'white' : 'black')}`);
     setGameStatus('active');
@@ -170,9 +345,39 @@ function App() {
         setFen(event.fen);
       }
       if (event.pgn) setPgn(event.pgn);
+      if (event.san && event.from && event.to) {
+        setMoveTracker((items) => {
+          if (items.some((item) => item.moveNumber === Number(event.moveNumber) && item.from === event.from && item.to === event.to)) return items;
+          return [...items, {
+            moveNumber: Number(event.moveNumber || items.length + 1),
+            playerId: event.playerId,
+            from: event.from,
+            to: event.to,
+            san: event.san,
+            fen: event.fen,
+            check: event.check,
+            checkmate: event.checkmate,
+            status: event.status,
+            whiteTimeMs: event.whiteTimeMs,
+            blackTimeMs: event.blackTimeMs
+          }];
+        });
+      }
       if (event.whiteTimeMs !== undefined) setWhiteTimeMs(event.whiteTimeMs);
       if (event.blackTimeMs !== undefined) setBlackTimeMs(event.blackTimeMs);
       if (event.status === 'finished') setGameStatus('finished');
+    });
+    socket.on('game.started', (event) => {
+      const nextGameId = event.gameId || event.matchId;
+      if (!nextGameId || nextGameId !== gameIdRef.current) return;
+      if (event.fen) {
+        chess.load(event.fen);
+        setFen(event.fen);
+      }
+      if (event.whiteTimeMs !== undefined) setWhiteTimeMs(Number(event.whiteTimeMs));
+      if (event.blackTimeMs !== undefined) setBlackTimeMs(Number(event.blackTimeMs));
+      setGameStatus('active');
+      socket.emit('game:join', { gameId: nextGameId });
     });
     socket.on('timer.tick', (event) => {
       setWhiteTimeMs(event.whiteTimeMs);
@@ -198,6 +403,11 @@ function App() {
 
   function onDrop(sourceSquare: string, targetSquare: string) {
     if (!token || !socket.connected || gameStatus.includes('finished') || gameStatus.includes('checkmate') || gameStatus.includes('draw')) return false;
+    const turnColor = chess.turn() === 'w' ? 'white' : 'black';
+    if (playerColor === 'spectator' || playerColor !== turnColor) {
+      setGameStatus('not your turn');
+      return false;
+    }
     socket.emit('game:move', { gameId, from: sourceSquare, to: targetSquare, promotion: 'q' }, (ack: any) => {
       if (!ack?.accepted) setGameStatus(`move rejected: ${ack?.reason || 'unknown'}`);
     });
@@ -211,12 +421,13 @@ function App() {
     setMatchmakingStatus('Searching...');
     setGameStatus('Searching...');
     try {
+      await fetch(`${api}/matchmaking/queue/${user.id}`, { method: 'DELETE' }).catch(() => undefined);
       const result = await request('/matchmaking/queue', {
         method: 'POST',
         body: JSON.stringify({ rating: user.rating || 1200, timeControl: 'rapid' })
       });
       if (result.status === 'matched') joinMatchedGame(result);
-    } catch (error) {
+    } catch {
       setSearching(false);
       setMatchmakingStatus('Matchmaking failed');
       setGameStatus('matchmaking failed');
@@ -234,9 +445,11 @@ function App() {
   async function startAiGame() {
     if (!user) return;
     resetBoard();
+    await fetch(`${api}/matchmaking/queue/${user.id}`, { method: 'DELETE' }).catch(() => undefined);
     setSearching(false);
     setMatchmakingStatus('Ready');
     setGameStatus('creating');
+    setPlayerColor(aiColor === 'black' ? 'white' : 'black');
     const body = aiColor === 'black'
       ? { whiteId: user.id, blackId: 'ai-bot', timeControl: 'rapid' }
       : { whiteId: 'ai-bot', blackId: user.id, timeControl: 'rapid' };
@@ -244,7 +457,7 @@ function App() {
     setGameId(game.matchId);
     socket.emit('game:join', { gameId: game.matchId });
     await request(`/ai/games/${game.matchId}/configure`, { method: 'POST', body: JSON.stringify({ botColor: aiColor, fen: chess.fen() }) });
-    setGameStatus(`playing simple AI (${aiColor})`);
+    setGameStatus(`playing Stockfish (${aiColor})`);
   }
 
   async function resign() {
@@ -278,37 +491,13 @@ function App() {
     input.value = '';
   }
 
-  if (!token || !user) {
-    return (
-      <main className="auth-wrapper">
-        <div className="auth-tabs">
-          <button
-            className={`tab-btn ${showAuth === 'login' ? 'active' : ''}`}
-            onClick={() => setShowAuth('login')}
-          >
-            Login
-          </button>
-          <button
-            className={`tab-btn ${showAuth === 'register' ? 'active' : ''}`}
-            onClick={() => setShowAuth('register')}
-          >
-            Register
-          </button>
-        </div>
+  const trackerRows = moveTracker.map((move) => ({
+    ...move,
+    side: move.playerId === user?.id ? 'You' : move.playerId === 'ai-bot' ? 'Stockfish' : 'Opponent',
+    evalScore: materialScore(move.fen)
+  }));
 
-        {showAuth === 'login' ? (
-          <Login onLogin={handleLogin} />
-        ) : (
-          <Register onRegister={handleRegister} />
-        )}
-
-        <div className="demo-login">
-          <p>Or try a demo account:</p>
-          <button onClick={demoLogin}>Create demo player</button>
-        </div>
-      </main>
-    );
-  }
+  if (!token || !user) return <AuthScreen onLogin={handleAuth} onRegister={handleAuth} onDemo={demoLogin} />;
 
   return (
     <main className="shell">
@@ -316,7 +505,7 @@ function App() {
         <h1>Chess Viet</h1>
         <button onClick={findMatch}><Swords size={18} /> Find Match</button>
         <button onClick={watchGame}><Eye size={18} /> Watch</button>
-        <button><Bot size={18} /> AI Bot</button>
+        <button onClick={startAiGame}><Bot size={18} /> AI Bot</button>
         <button onClick={() => { localStorage.clear(); location.reload(); }}><Users size={18} /> Logout</button>
       </aside>
 
@@ -324,10 +513,34 @@ function App() {
         <div className="topbar">
           <span><Wifi size={16} /> {connected ? 'Realtime online' : 'Reconnecting'}</span>
           <input value={gameId} onChange={(e) => setGameId(e.target.value)} />
+          <div className="notifWrap" onMouseEnter={() => setNotificationOpen(true)} onMouseLeave={() => setNotificationOpen(false)}>
+            <button className="iconButton" type="button" onClick={() => setNotificationOpen((open) => !open)}>
+              <Bell size={18} />
+              {notifications.length > 0 && <span>{notifications.length}</span>}
+            </button>
+            {notificationOpen && (
+              <div className="notifPopover">
+                <h3>Notifications</h3>
+                {notifications.length === 0 && <p>No notifications</p>}
+                {notifications.slice(0, 6).map((n, i) => (
+                  <p key={i}><b>{n.topic}</b><small>{JSON.stringify(n.event).slice(0, 90)}</small></p>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="players"><strong>Black</strong><span><Clock size={16} /> {formatClock(blackTimeMs)}</span></div>
-        <div className="board"><Chessboard position={fen} onPieceDrop={onDrop} boardWidth={Math.min(680, Math.max(320, window.innerWidth - 440))} customDarkSquareStyle={{ backgroundColor: '#779556' }} customLightSquareStyle={{ backgroundColor: '#ebecd0' }} /></div>
-        <div className="players"><strong>{user.username}</strong><span><Clock size={16} /> {formatClock(whiteTimeMs)}</span></div>
+        <div className="players"><strong>Black {playerColor === 'black' ? '(you)' : ''}</strong><span><Clock size={16} /> {formatClock(blackTimeMs)}</span></div>
+        <div className="board">
+          <Chessboard
+            position={fen}
+            onPieceDrop={onDrop}
+            boardOrientation={playerColor === 'black' ? 'black' : 'white'}
+            boardWidth={Math.min(680, Math.max(320, window.innerWidth - 440))}
+            customDarkSquareStyle={{ backgroundColor: '#779556' }}
+            customLightSquareStyle={{ backgroundColor: '#ebecd0' }}
+          />
+        </div>
+        <div className="players"><strong>{playerColor === 'white' ? user.username : 'White'}</strong><span><Clock size={16} /> {formatClock(whiteTimeMs)}</span></div>
         <div className="actionbar">
           <button onClick={resign}><Flag size={16} /> Resign</button>
           <button onClick={offerDraw}><Handshake size={16} /> Draw</button>
@@ -375,13 +588,22 @@ function App() {
         </section>
 
         <section>
-          <h2><Users size={18} /> Friend Invite</h2>
-          <form onSubmit={inviteFriend}><input name="friendId" placeholder="Friend user id" /><button>Invite</button></form>
+          <h2><Swords size={18} /> Move Tracker</h2>
+          <div className="tracker">
+            {trackerRows.length === 0 && <p className="emptyLine">No moves yet</p>}
+            {trackerRows.map((move) => (
+              <div className="trackerRow" key={`${move.moveNumber}-${move.from}-${move.to}`}>
+                <b>{move.moveNumber}. {move.san}</b>
+                <span>{move.side} · {move.from}-{move.to}</span>
+                <small>Eval {formatEval(move.evalScore)} {move.checkmate ? '· checkmate' : move.check ? '· check' : ''}</small>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section>
-          <h2><Bell size={18} /> Notifications</h2>
-          <div className="list">{notifications.slice(0, 5).map((n, i) => <p key={i}><b>{n.topic}</b><span>{JSON.stringify(n.event).slice(0, 60)}</span></p>)}</div>
+          <h2><Users size={18} /> Friend Invite</h2>
+          <form onSubmit={inviteFriend}><input name="friendId" placeholder="Friend user id" /><button>Invite</button></form>
         </section>
 
         <section>

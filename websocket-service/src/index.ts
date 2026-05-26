@@ -221,7 +221,7 @@ async function main() {
   await consumer.subscribe({ topic: 'timer.tick', fromBeginning: false }).catch(() => undefined);
   await consumer.subscribe({ topic: 'draw.offered', fromBeginning: false }).catch(() => undefined);
   await consumer.subscribe({ topic: 'friend.invited', fromBeginning: false }).catch(() => undefined);
-  await consumer.run({
+  consumer.run({
     eachMessage: async ({ topic, message }) => {
       if (!message.value) return;
       const event = JSON.parse(message.value.toString());
@@ -239,7 +239,7 @@ async function main() {
       if (topic === 'game.started') await emitPresence(gameId);
       if (topic === 'move.played') io.to(`game:${event.gameId}`).emit('game:state:patch', event);
     }
-  }).catch(() => undefined);
+  }).catch(console.warn);
   server.listen(port, () => console.log(`${service} listening on ${port}`));
 }
 main().catch((error) => { console.error(error); process.exit(1); });

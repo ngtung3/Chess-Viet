@@ -83,15 +83,16 @@ async function withLock<T>(key: string, ttlMs: number, fn: () => Promise<T>) {
 async function createGame(event: any) {
   const initialTimeMs = Number(event.initialTimeMs || 300000);
   const incrementMs = Number(event.incrementMs || 0);
+  const initialFen = new Chess().fen();
   await pool.execute('INSERT IGNORE INTO games (id, white_id, black_id, status, fen, turn) VALUES (?, ?, ?, ?, ?, ?)', [
-    event.matchId, event.whiteId, event.blackId, 'active', new Chess().fen(), 'white'
+    event.matchId, event.whiteId, event.blackId, 'active', initialFen, 'white'
   ]);
   await pool.execute('INSERT INTO game_events (game_id, event_type, payload) VALUES (?, ?, ?)', [event.matchId, 'game.created', JSON.stringify(event)]);
   await redis.hSet(`game:${event.matchId}`, {
     id: event.matchId,
     whiteId: event.whiteId,
     blackId: event.blackId,
-    fen: new Chess().fen(),
+    fen: initialFen,
     pgn: '',
     turn: 'white',
     moveNumber: '0',
@@ -101,7 +102,17 @@ async function createGame(event: any) {
     incrementMs: String(incrementMs),
     lastTickAt: String(Date.now())
   });
-  await publish('game.started', event.matchId, event);
+  await publish('game.started', event.matchId, {
+    ...event,
+    gameId: event.matchId,
+    fen: initialFen,
+    pgn: '',
+    turn: 'white',
+    status: 'active',
+    whiteTimeMs: initialTimeMs,
+    blackTimeMs: initialTimeMs,
+    incrementMs
+  });
 }
 
 function colorOf(playerId: string, state: Record<string, string>) {
@@ -167,6 +178,19 @@ function applyClock(state: Record<string, string>, movingColor: 'white' | 'black
   return { whiteTimeMs: Math.max(0, nextWhite), blackTimeMs: Math.max(0, nextBlack), now };
 }
 
+function chessFromState(state: Record<string, string>) {
+  const chess = new Chess();
+  if (state.pgn) {
+    try {
+      chess.loadPgn(state.pgn);
+      return chess;
+    } catch {
+      // Fall back to the current FEN if stored PGN is incomplete or corrupt.
+    }
+  }
+  return new Chess(state.fen && state.fen !== 'startpos' ? state.fen : undefined);
+}
+
 async function applyMove(gameId: string, payload: any) {
   return withLock(`lock:game:${gameId}`, 3000, async () => {
     const state = await redis.hGetAll(`game:${gameId}`);
@@ -189,8 +213,13 @@ async function applyMove(gameId: string, payload: any) {
       return { finished };
     }
 
-    const chess = new Chess(state.fen && state.fen !== 'startpos' ? state.fen : undefined);
-    const legalMove = chess.move({ from: payload.from, to: payload.to, promotion: payload.promotion || 'q' });
+    const chess = chessFromState(state);
+    let legalMove = null;
+    try {
+      legalMove = chess.move({ from: payload.from, to: payload.to, promotion: payload.promotion || 'q' });
+    } catch {
+      legalMove = null;
+    }
     if (!legalMove) throw new Error('illegal_move');
 
     const moveNumber = Number(state.moveNumber || 0) + 1;
@@ -343,12 +372,12 @@ async function main() {
   await Promise.all([retry('redis', () => redis.connect()), producer.connect().catch(() => undefined), consumer.connect().catch(() => undefined), retry('mysql', initDb)]);
   await consumer.subscribe({ topic: 'match.created', fromBeginning: true }).catch(() => undefined);
   await consumer.subscribe({ topic: 'move.validated', fromBeginning: false }).catch(() => undefined);
-  await consumer.run({ eachMessage: async ({ topic, message }) => {
+  consumer.run({ eachMessage: async ({ topic, message }) => {
     if (!message.value) return;
     const event = JSON.parse(message.value.toString());
     if (topic === 'match.created') await createGame(event);
     if (topic === 'move.validated') await applyMove(event.gameId, event).catch(console.warn);
-  } }).catch(() => undefined);
+  } }).catch(console.warn);
   setInterval(() => tickTimers().catch(console.warn), 1000);
   app.listen(port, () => console.log(`${service} listening on ${port}`));
 }
