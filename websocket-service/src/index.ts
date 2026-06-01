@@ -113,6 +113,16 @@ async function leaveGameRooms(socket: Socket, keepGameId?: string) {
 
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  const rawGuestId = socket.handshake.auth?.guestId || socket.handshake.query?.guestId;
+  const guestId = typeof rawGuestId === 'string' && rawGuestId.startsWith('guest-') ? rawGuestId.slice(0, 80) : '';
+  if (!token && guestId) {
+    socket.data.user = {
+      id: guestId,
+      username: String(socket.handshake.auth?.username || socket.handshake.query?.username || guestId).slice(0, 80),
+      guest: true
+    } satisfies SocketUser;
+    return next();
+  }
   if (!token && process.env.AUTH_REQUIRED === 'false') {
     socket.data.user = { id: `guest-${socket.id}`, guest: true } satisfies SocketUser;
     return next();
@@ -233,6 +243,9 @@ async function main() {
         io.to(`user:${event.whiteId}`).emit('match:found', { ...event, color: 'white' });
         io.to(`user:${event.blackId}`).emit('match:found', { ...event, color: 'black' });
         return;
+      }
+      if (topic === 'friend.invited') {
+        io.to(`user:${event.toUserId || event.userId}`).emit(topic, event);
       }
       const gameId = event.gameId || event.matchId;
       io.to(`game:${gameId}`).emit(topic, event);

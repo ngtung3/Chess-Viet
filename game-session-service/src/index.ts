@@ -21,7 +21,23 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME || 'chess_games',
   waitForConnections: true
 });
-type AuthedRequest = express.Request & { user?: { id: string; username?: string } };
+type AuthedRequest = express.Request & { user?: { id: string; username?: string; guest?: boolean } };
+
+const timeControls: Record<string, { initialTimeMs: number; incrementMs: number }> = {
+  blitz: { initialTimeMs: 180000, incrementMs: 0 },
+  rapid: { initialTimeMs: 600000, incrementMs: 0 },
+  classical: { initialTimeMs: 2700000, incrementMs: 0 }
+};
+
+function normalizeTimeControl(value: unknown) {
+  return typeof value === 'string' && timeControls[value] ? value : 'rapid';
+}
+
+function guestIdFrom(req: express.Request) {
+  const raw = req.body?.guestId || req.header('x-guest-id');
+  const guestId = typeof raw === 'string' ? raw.trim() : '';
+  return guestId.startsWith('guest-') ? guestId.slice(0, 80) : '';
+}
 
 async function initDb() {
   await pool.query(`CREATE TABLE IF NOT EXISTS games (
@@ -40,6 +56,13 @@ async function initDb() {
 function requireAuth(req: AuthedRequest, res: express.Response, next: express.NextFunction) {
   if (process.env.AUTH_REQUIRED === 'false') return next();
   const raw = req.headers.authorization?.replace('Bearer ', '');
+  if (!raw) {
+    const guestId = guestIdFrom(req);
+    if (guestId) {
+      req.user = { id: guestId, username: req.body?.guestName || guestId, guest: true };
+      return next();
+    }
+  }
   if (!raw) {
     res.status(401).json({ error: 'missing_token' });
     return;
@@ -300,13 +323,15 @@ app.get('/metrics', (_req, res) => res.type('text/plain').send(`service_up{servi
 
 app.post('/games', requireAuth, async (req: AuthedRequest, res, next) => {
   try {
+    const timeControl = normalizeTimeControl(req.body.timeControl);
+    const clock = timeControls[timeControl];
     const event = {
       matchId: randomUUID(),
       whiteId: req.body.whiteId || req.user!.id,
       blackId: req.body.blackId,
-      timeControl: req.body.timeControl || 'rapid',
-      initialTimeMs: req.body.initialTimeMs || 300000,
-      incrementMs: req.body.incrementMs || 2000
+      timeControl,
+      initialTimeMs: req.body.initialTimeMs || clock.initialTimeMs,
+      incrementMs: req.body.incrementMs ?? clock.incrementMs
     };
     await createGame(event);
     res.status(201).json(event);
@@ -314,7 +339,18 @@ app.post('/games', requireAuth, async (req: AuthedRequest, res, next) => {
 });
 
 app.get('/games', requireAuth, async (req: AuthedRequest, res) => {
-  const [rows] = await pool.execute('SELECT id, white_id, black_id, status, result, winner_id, created_at, finished_at FROM games WHERE white_id = ? OR black_id = ? ORDER BY created_at DESC LIMIT 30', [req.user!.id, req.user!.id]);
+  const [rows] = await pool.execute(`
+    SELECT
+      g.id, g.white_id, g.black_id, g.status, g.result, g.winner_id, g.created_at, g.finished_at,
+      COALESCE(w.username, CASE WHEN g.white_id = 'ai-bot' THEN 'Stockfish' WHEN g.white_id LIKE 'guest-%' THEN CONCAT('Guest ', RIGHT(g.white_id, 4)) ELSE g.white_id END) AS white_name,
+      COALESCE(b.username, CASE WHEN g.black_id = 'ai-bot' THEN 'Stockfish' WHEN g.black_id LIKE 'guest-%' THEN CONCAT('Guest ', RIGHT(g.black_id, 4)) ELSE g.black_id END) AS black_name
+    FROM games g
+    LEFT JOIN chess_auth.users w ON w.id = g.white_id
+    LEFT JOIN chess_auth.users b ON b.id = g.black_id
+    WHERE g.white_id = ? OR g.black_id = ?
+    ORDER BY g.created_at DESC
+    LIMIT 30
+  `, [req.user!.id, req.user!.id]);
   res.json(rows);
 });
 

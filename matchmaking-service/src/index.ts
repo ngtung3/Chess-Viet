@@ -19,7 +19,23 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME || 'chess_matchmaking',
   waitForConnections: true
 });
-type AuthedRequest = express.Request & { user?: { id: string; username?: string } };
+type AuthedRequest = express.Request & { user?: { id: string; username?: string; guest?: boolean } };
+
+const timeControls: Record<string, { initialTimeMs: number; incrementMs: number }> = {
+  blitz: { initialTimeMs: 180000, incrementMs: 0 },
+  rapid: { initialTimeMs: 600000, incrementMs: 0 },
+  classical: { initialTimeMs: 2700000, incrementMs: 0 }
+};
+
+function normalizeTimeControl(value: unknown) {
+  return typeof value === 'string' && timeControls[value] ? value : 'rapid';
+}
+
+function guestIdFrom(req: express.Request) {
+  const raw = req.body?.guestId || req.header('x-guest-id');
+  const guestId = typeof raw === 'string' ? raw.trim() : '';
+  return guestId.startsWith('guest-') ? guestId.slice(0, 80) : '';
+}
 
 async function initDb() {
   await pool.query(`CREATE TABLE IF NOT EXISTS queue_events (
@@ -31,6 +47,13 @@ async function initDb() {
 function requireAuth(req: AuthedRequest, res: express.Response, next: express.NextFunction) {
   if (process.env.AUTH_REQUIRED === 'false') return next();
   const raw = req.headers.authorization?.replace('Bearer ', '');
+  if (!raw) {
+    const guestId = guestIdFrom(req);
+    if (guestId) {
+      req.user = { id: guestId, username: req.body?.guestName || guestId, guest: true };
+      return next();
+    }
+  }
   if (!raw) {
     res.status(401).json({ error: 'missing_token' });
     return;
@@ -60,8 +83,8 @@ async function publish(topic: string, key: string, value: object) {
   await producer.send({ topic, messages: [{ key, value: JSON.stringify({ ...value, service, at: new Date().toISOString() }) }] }).catch(console.warn);
 }
 
-async function matchCandidate(userId: string, rating: number, timeControl: string) {
-  const key = `queue:${timeControl}`;
+async function matchCandidate(userId: string, rating: number, timeControl: string, poolName: string) {
+  const key = `queue:${poolName}:${timeControl}`;
   const min = rating - 150;
   const max = rating + 150;
   const candidates = await redis.zRangeByScoreWithScores(key, min, max, { LIMIT: { offset: 0, count: 10 } });
@@ -80,14 +103,17 @@ app.get('/metrics', (_req, res) => res.type('text/plain').send(`service_up{servi
 app.post('/queue', requireAuth, async (req: AuthedRequest, res, next) => {
   try {
     const userId = req.body.userId || req.user!.id;
-    const { rating = 1200, timeControl = 'rapid' } = req.body;
-    const key = `queue:${timeControl}`;
+    const { rating = 1200 } = req.body;
+    const timeControl = normalizeTimeControl(req.body.timeControl);
+    const poolName = req.user?.guest ? 'guest' : 'registered';
+    const key = `queue:${poolName}:${timeControl}`;
     await redis.zAdd(key, [{ score: Number(rating), value: userId }]);
     await pool.execute('INSERT INTO queue_events (id, user_id, rating, time_control, event_type) VALUES (?, ?, ?, ?, ?)', [randomUUID(), userId, rating, timeControl, 'queued']);
-    const match = await matchCandidate(userId, Number(rating), timeControl);
+    const match = await matchCandidate(userId, Number(rating), timeControl, poolName);
     if (!match) return res.status(202).json({ status: 'queued', userId, rating, timeControl });
     const matchId = randomUUID();
-    const event = { matchId, whiteId: userId, blackId: match.opponentId, timeControl, initialTimeMs: 300000, incrementMs: 2000 };
+    const clock = timeControls[timeControl];
+    const event = { matchId, whiteId: userId, blackId: match.opponentId, timeControl, ...clock, pool: poolName };
     await publish('match.created', matchId, event);
     res.status(201).json({ status: 'matched', ...event });
   } catch (error) {

@@ -181,6 +181,10 @@ button:disabled {
   color: var(--text-primary);
 }
 
+.auth-v2-secondary + .auth-v2-secondary {
+  margin-top: 10px;
+}
+
 .auth-v2-secondary:hover {
   background: var(--bg-card);
 }
@@ -258,16 +262,17 @@ button:disabled {
 .boardArea {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-rows: auto 1fr;
   gap: 12px;
   padding: 18px;
-  place-items: center;
+  align-items: start;
+  justify-items: center;
 }
 
 .topbar,
 .players,
 .actionbar {
-  width: min(680px, 100%);
+  width: min(920px, 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -299,6 +304,27 @@ button:disabled {
   background: #0f120f;
   color: #f3f5ef;
   padding: 9px 10px;
+}
+
+.accountPill {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid #2d332e;
+  border-radius: 6px;
+  background: #0f120f;
+  color: #f3f5ef;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.accountPill span {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .iconButton {
@@ -370,8 +396,28 @@ button:disabled {
   border: 1px solid #262c27;
 }
 
+.players.active {
+  border-color: var(--accent-green);
+  box-shadow: inset 3px 0 0 var(--accent-green);
+}
+
+.gameStage {
+  width: min(920px, 100%);
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 252px;
+  gap: 14px;
+  align-items: start;
+}
+
+.boardColumn {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
 .board {
-  width: min(680px, 100%);
+  width: 100%;
   display: flex;
   justify-content: center;
 }
@@ -404,7 +450,17 @@ button:disabled {
   background: #0f120f;
 }
 
-.panel h2 {
+.analysisPanel {
+  position: sticky;
+  top: 18px;
+  padding: 14px;
+  border: 1px solid #2d332e;
+  border-radius: 8px;
+  background: #0f120f;
+}
+
+.panel h2,
+.analysisPanel h2 {
   margin: 0 0 12px;
   font-size: 15px;
 }
@@ -432,6 +488,22 @@ button:disabled {
 .panel form {
   display: flex;
   gap: 8px;
+}
+
+.stackedControls {
+  display: grid;
+  gap: 8px;
+}
+
+.fieldLabel {
+  color: #b8c2b0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.panel section > select,
+.stackedControls select {
+  width: 100%;
 }
 
 .controls select,
@@ -485,6 +557,14 @@ button:disabled {
 .list button {
   padding: 9px 10px;
   text-align: left;
+  display: grid;
+  gap: 4px;
+}
+
+.list button small {
+  color: #b8c2b0;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .tracker {
@@ -514,6 +594,50 @@ button:disabled {
   font-size: 12px;
 }
 
+.chessTracker {
+  max-height: 420px;
+}
+
+.trackerPair {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: 28px 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: #171b18;
+  font-size: 13px;
+}
+
+.trackerPair b {
+  color: #7f8a79;
+  font-size: 12px;
+}
+
+.trackerPair span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evalBox {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid #2d332e;
+  color: #b8c2b0;
+  font-size: 13px;
+}
+
+.evalBox strong {
+  color: #f3f5ef;
+  font-size: 18px;
+}
+
 pre {
   max-height: 140px;
   overflow: auto;
@@ -540,6 +664,10 @@ pre {
 @media (max-width: 1080px) {
   .shell {
     grid-template-columns: 150px minmax(360px, 1fr);
+  }
+
+  .gameStage {
+    grid-template-columns: minmax(320px, 1fr) 230px;
   }
 
   .panel {
@@ -592,5 +720,22 @@ pre {
 
   .panel {
     grid-template-columns: 1fr;
+  }
+
+  .gameStage {
+    grid-template-columns: 1fr;
+  }
+
+  .analysisPanel {
+    position: static;
+    width: 100%;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .topbar input {
+    flex: 1 1 100%;
   }
 }

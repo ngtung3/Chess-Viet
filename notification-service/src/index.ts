@@ -15,7 +15,7 @@ app.get('/:userId', (req, res) => res.json(notifications.filter((n) => n.userId 
 
 async function main() {
   await consumer.connect().catch(() => undefined);
-  for (const topic of ['match.created', 'game.started', 'game.finished', 'move.rejected', 'draw.offered', 'friend.requested', 'friend.responded', 'friend.invited']) {
+  for (const topic of ['match.created', 'game.finished', 'draw.offered', 'friend.requested', 'friend.responded', 'friend.invited']) {
     await consumer.subscribe({ topic, fromBeginning: false }).catch(() => undefined);
   }
   await consumer.run({
