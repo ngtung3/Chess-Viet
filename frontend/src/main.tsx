@@ -266,7 +266,7 @@ function AuthScreen({
 
     const timer = window.setInterval(() => {
       void playEngineMove();
-    }, 1500);
+    }, 900);
 
     void playEngineMove();
 
