@@ -22,13 +22,22 @@ const pool = mysql.createPool({
 type AuthedRequest = express.Request & { user?: { id: string; username?: string; guest?: boolean } };
 
 const timeControls: Record<string, { initialTimeMs: number; incrementMs: number }> = {
-  blitz: { initialTimeMs: 180000, incrementMs: 0 },
-  rapid: { initialTimeMs: 600000, incrementMs: 0 },
-  classical: { initialTimeMs: 2700000, incrementMs: 0 }
+  blitz_3: { initialTimeMs: 180000, incrementMs: 0 },
+  blitz_3_1: { initialTimeMs: 180000, incrementMs: 1000 },
+  blitz_5: { initialTimeMs: 300000, incrementMs: 0 },
+  rapid_10: { initialTimeMs: 600000, incrementMs: 0 },
+  rapid_15: { initialTimeMs: 900000, incrementMs: 0 },
+  rapid_30: { initialTimeMs: 1800000, incrementMs: 0 },
+  daily_1: { initialTimeMs: 86400000, incrementMs: 0 },
+  daily_3: { initialTimeMs: 259200000, incrementMs: 0 },
+  daily_7: { initialTimeMs: 604800000, incrementMs: 0 }
 };
 
 function normalizeTimeControl(value: unknown) {
-  return typeof value === 'string' && timeControls[value] ? value : 'rapid';
+  if (value === 'blitz') return 'blitz_3';
+  if (value === 'rapid') return 'rapid_10';
+  if (value === 'classical') return 'daily_1';
+  return typeof value === 'string' && timeControls[value] ? value : 'rapid_10';
 }
 
 function guestIdFrom(req: express.Request) {

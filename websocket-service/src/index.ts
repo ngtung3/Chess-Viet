@@ -246,6 +246,7 @@ async function main() {
       }
       if (topic === 'friend.invited') {
         io.to(`user:${event.toUserId || event.userId}`).emit(topic, event);
+        return;
       }
       const gameId = event.gameId || event.matchId;
       io.to(`game:${gameId}`).emit(topic, event);

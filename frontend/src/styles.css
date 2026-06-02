@@ -189,6 +189,39 @@ button:disabled {
   background: var(--bg-card);
 }
 
+.guest-link {
+  width: 100%;
+  margin-top: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-decoration: underline;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.guestSetup {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.guestSetup label,
+.eloSlider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.guestSetup input[type="range"],
+.eloSlider input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-green);
+}
+
 .auth-v2-divider {
   display: flex;
   align-items: center;
@@ -217,6 +250,10 @@ button:disabled {
   grid-template-columns: 188px minmax(420px, 1fr) 360px;
   background: #11140f;
   color: #f3f5ef;
+}
+
+.guestShell {
+  grid-template-columns: minmax(420px, 1fr);
 }
 
 .rail {
@@ -306,6 +343,15 @@ button:disabled {
   padding: 9px 10px;
 }
 
+.topbarButton {
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #262c27;
+  color: #f3f5ef;
+  font-weight: 800;
+}
+
 .accountPill {
   min-width: 0;
   display: inline-flex;
@@ -389,6 +435,24 @@ button:disabled {
   color: #f3f5ef;
 }
 
+.notifItem {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  display: grid;
+  gap: 3px;
+  border: 0;
+  border-radius: 6px;
+  background: #171b18;
+  color: #b8c2b0;
+  text-align: left;
+  font-size: 12px;
+}
+
+.notifItem:hover {
+  background: #262c27;
+}
+
 .players {
   padding: 11px 14px;
   border-radius: 8px;
@@ -402,11 +466,46 @@ button:disabled {
 }
 
 .gameStage {
-  width: min(920px, 100%);
+  width: min(1080px, 100%);
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) 252px;
+  grid-template-columns: minmax(360px, 1fr) 300px;
   gap: 14px;
   align-items: start;
+}
+
+.gameStage.boardOnly {
+  width: min(760px, 100%);
+  grid-template-columns: 1fr;
+}
+
+.guestMatchBar {
+  width: min(1080px, 100%);
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr 150px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #262c27;
+  border-radius: 8px;
+  background: #171b18;
+}
+
+.guestMatchBar h2,
+.guestMatchBar p {
+  margin: 0;
+}
+
+.guestMatchBar h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+}
+
+.guestMatchBar p {
+  margin-top: 4px;
+  color: #b8c2b0;
+  font-size: 12px;
 }
 
 .boardColumn {
@@ -453,6 +552,11 @@ button:disabled {
 .analysisPanel {
   position: sticky;
   top: 18px;
+  min-height: 360px;
+  max-height: 680px;
+  display: grid;
+  grid-template-rows: auto minmax(90px, 1fr) auto auto minmax(120px, 0.8fr);
+  overflow: hidden;
   padding: 14px;
   border: 1px solid #2d332e;
   border-radius: 8px;
@@ -493,6 +597,43 @@ button:disabled {
 .stackedControls {
   display: grid;
   gap: 8px;
+}
+
+.timeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.timeGrid button {
+  min-height: 54px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 2px;
+  border: 1px solid #2d332e;
+  border-radius: 6px;
+  background: #171b18;
+  color: #f3f5ef;
+  text-align: left;
+}
+
+.timeGrid button.active {
+  border-color: var(--accent-green);
+  box-shadow: inset 0 0 0 1px var(--accent-green);
+}
+
+.timeGrid button span {
+  color: #b8c2b0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.timeGrid button b {
+  grid-column: 1 / -1;
+  font-size: 12px;
 }
 
 .fieldLabel {
@@ -595,7 +736,8 @@ button:disabled {
 }
 
 .chessTracker {
-  max-height: 420px;
+  min-height: 0;
+  max-height: none;
 }
 
 .trackerPair {
@@ -623,7 +765,7 @@ button:disabled {
 }
 
 .evalBox {
-  margin-top: 12px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -638,6 +780,123 @@ button:disabled {
   font-size: 18px;
 }
 
+.analysisNotices {
+  min-height: 0;
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.analysisNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #171b18;
+  color: #d8ded1;
+  font-size: 12px;
+}
+
+.analysisNotice button {
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 8px;
+  background: var(--accent-green);
+  color: #101311;
+  font-weight: 800;
+}
+
+.analysisChat {
+  min-height: 0;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #2d332e;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.analysisChat h2 {
+  margin-bottom: 8px;
+}
+
+.historyUnderBoard {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #2d332e;
+  border-radius: 8px;
+  background: #0f120f;
+}
+
+.historyUnderBoard h2 {
+  margin: 0 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+}
+
+.historyStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.historyStrip button {
+  min-width: 0;
+  padding: 10px;
+  border: 0;
+  border-radius: 6px;
+  background: #171b18;
+  color: #f3f5ef;
+  text-align: left;
+  font-weight: 800;
+}
+
+.historyCard {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.historyIcon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #262c27;
+  color: var(--accent-green);
+}
+
+.historyPlayers {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.historyPlayers b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historyMeta {
+  grid-column: 2 / -1;
+  color: #b8c2b0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.historyStrip button small {
+  color: #b8c2b0;
+  font-size: 11px;
+}
+
 pre {
   max-height: 140px;
   overflow: auto;
@@ -647,7 +906,8 @@ pre {
 }
 
 .chat {
-  height: 160px;
+  min-height: 0;
+  height: auto;
   overflow-y: auto;
   margin-bottom: 10px;
   padding: 10px;
@@ -667,7 +927,7 @@ pre {
   }
 
   .gameStage {
-    grid-template-columns: minmax(320px, 1fr) 230px;
+    grid-template-columns: minmax(320px, 1fr) 280px;
   }
 
   .panel {
@@ -723,6 +983,10 @@ pre {
   }
 
   .gameStage {
+    grid-template-columns: 1fr;
+  }
+
+  .guestMatchBar {
     grid-template-columns: 1fr;
   }
 

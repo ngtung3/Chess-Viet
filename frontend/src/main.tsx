@@ -6,6 +6,7 @@ import { io } from 'socket.io-client';
 import {
   Bell,
   Bot,
+  CalendarDays,
   Clock,
   Eye,
   Flag,
@@ -14,17 +15,20 @@ import {
   MessageSquare,
   Shuffle,
   Swords,
+  Timer,
   UserCircle,
   Users,
+  Zap,
   Wifi
 } from 'lucide-react';
+import { getBestMove } from './lib/chessEngine';
 import './styles.css';
 
 const api = import.meta.env.VITE_API_URL || '/api';
 const socket = io(import.meta.env.VITE_WS_URL || '/', { transports: ['websocket'], autoConnect: false, reconnection: true });
 
 type User = { id: string; username: string; email?: string; rating: number; guest?: boolean };
-type TimeControl = 'blitz' | 'rapid' | 'classical';
+type TimeControl = 'blitz_3' | 'blitz_3_1' | 'blitz_5' | 'rapid_10' | 'rapid_15' | 'rapid_30' | 'daily_1' | 'daily_3' | 'daily_7';
 type PlayerColor = 'white' | 'black' | 'spectator';
 type BotSide = 'white' | 'black' | 'random';
 type PresencePerson = {
@@ -56,6 +60,12 @@ type MoveTrackerItem = {
   whiteTimeMs?: number;
   blackTimeMs?: number;
 };
+type AnalysisNotice = {
+  id: string;
+  type: 'draw' | 'system';
+  message: string;
+  event?: any;
+};
 type GamePlayers = {
   whiteId?: string;
   blackId?: string;
@@ -63,20 +73,17 @@ type GamePlayers = {
   blackName?: string;
 };
 
-const timeControlOptions: Record<TimeControl, { label: string; initialTimeMs: number; incrementMs: number }> = {
-  blitz: { label: 'Blitz 3 min', initialTimeMs: 180000, incrementMs: 0 },
-  rapid: { label: 'Rapid 10 min', initialTimeMs: 600000, incrementMs: 0 },
-  classical: { label: 'Classical 45 min', initialTimeMs: 2700000, incrementMs: 0 }
+const timeControlOptions: Record<TimeControl, { label: string; group: 'Blitz' | 'Rapid' | 'Daily'; initialTimeMs: number; incrementMs: number }> = {
+  blitz_3: { label: '3 min', group: 'Blitz', initialTimeMs: 180000, incrementMs: 0 },
+  blitz_3_1: { label: '3+1', group: 'Blitz', initialTimeMs: 180000, incrementMs: 1000 },
+  blitz_5: { label: '5 min', group: 'Blitz', initialTimeMs: 300000, incrementMs: 0 },
+  rapid_10: { label: '10 min', group: 'Rapid', initialTimeMs: 600000, incrementMs: 0 },
+  rapid_15: { label: '15 min', group: 'Rapid', initialTimeMs: 900000, incrementMs: 0 },
+  rapid_30: { label: '30 min', group: 'Rapid', initialTimeMs: 1800000, incrementMs: 0 },
+  daily_1: { label: '1 day', group: 'Daily', initialTimeMs: 86400000, incrementMs: 0 },
+  daily_3: { label: '3 days', group: 'Daily', initialTimeMs: 259200000, incrementMs: 0 },
+  daily_7: { label: '7 days', group: 'Daily', initialTimeMs: 604800000, incrementMs: 0 }
 };
-
-const botEloOptions = [
-  { elo: 400, skill: 0 },
-  { elo: 800, skill: 3 },
-  { elo: 1200, skill: 6 },
-  { elo: 1600, skill: 10 },
-  { elo: 2000, skill: 14 },
-  { elo: 2400, skill: 18 }
-];
 
 function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -94,6 +101,10 @@ function guestHeaders(user: User | null): Record<string, string> {
 function newGuestUser(): User {
   const id = `guest-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
   return { id, username: `Guest ${id.slice(-4)}`, rating: 1200, guest: true };
+}
+
+function skillFromElo(elo: number) {
+  return Math.max(0, Math.min(20, Math.round(((elo - 400) / 2000) * 20)));
 }
 
 function formatClock(ms: number) {
@@ -166,16 +177,34 @@ function notificationText(n: any) {
   return n.topic || 'Notification';
 }
 
+function TimeControlIcon({ group }: { group: 'Blitz' | 'Rapid' | 'Daily' }) {
+  if (group === 'Blitz') return <Zap size={15} />;
+  if (group === 'Daily') return <CalendarDays size={15} />;
+  return <Timer size={15} />;
+}
+
+function TimeControlPicker({ value, onChange }: { value: TimeControl; onChange: (value: TimeControl) => void }) {
+  return (
+    <div className="timeGrid">
+      {(Object.entries(timeControlOptions) as [TimeControl, typeof timeControlOptions[TimeControl]][]).map(([key, option]) => (
+        <button type="button" key={key} className={value === key ? 'active' : ''} onClick={() => onChange(key)}>
+          <TimeControlIcon group={option.group} />
+          <span>{option.group}</span>
+          <b>{option.label}</b>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AuthScreen({
   onLogin,
   onRegister,
-  onDemo,
   onGuest
 }: {
   onLogin: (token: string, user: User) => void;
   onRegister: (token: string, user: User) => void;
-  onDemo: () => Promise<void>;
-  onGuest: () => void;
+  onGuest: (rating: number) => void;
 }) {
   const heroChess = useMemo(() => new Chess(), []);
   const [fen, setFen] = useState(heroChess.fen());
@@ -186,6 +215,8 @@ function AuthScreen({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [boardWidth, setBoardWidth] = useState(520);
+  const [guestSetup, setGuestSetup] = useState(false);
+  const [guestRating, setGuestRating] = useState(1200);
 
   useEffect(() => {
     const resize = () => {
@@ -199,14 +230,50 @@ function AuthScreen({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    let thinking = false;
+
+    const playEngineMove = async () => {
+      if (thinking || cancelled) return;
+      thinking = true;
+
+      try {
+        if (heroChess.isGameOver()) heroChess.reset();
+
+        const bestMove = await getBestMove(heroChess.fen(), 4);
+        if (cancelled) return;
+
+        if (bestMove && bestMove.length >= 4) {
+          try {
+            heroChess.move({
+              from: bestMove.slice(0, 2),
+              to: bestMove.slice(2, 4),
+              promotion: bestMove.slice(4, 5) || 'q'
+            });
+          } catch {
+            heroChess.reset();
+          }
+        }
+
+        if (heroChess.isGameOver()) heroChess.reset();
+        setFen(heroChess.fen());
+      } catch {
+        if (!cancelled) setFen(heroChess.fen());
+      } finally {
+        thinking = false;
+      }
+    };
+
     const timer = window.setInterval(() => {
-      if (heroChess.isGameOver()) heroChess.reset();
-      const moves = heroChess.moves();
-      const move = moves[Math.floor(Math.random() * moves.length)];
-      if (move) heroChess.move(move);
-      setFen(heroChess.fen());
-    }, 900);
-    return () => window.clearInterval(timer);
+      void playEngineMove();
+    }, 1500);
+
+    void playEngineMove();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [heroChess]);
 
   async function submit(event: React.FormEvent) {
@@ -300,13 +367,25 @@ function AuthScreen({
 
           {error && <div className="error-message">{error}</div>}
 
-          <div className="auth-v2-divider"><span />or<span /></div>
-          <button type="button" className="auth-v2-secondary" onClick={() => void onDemo()}>
-            Create demo account
-          </button>
-          <button type="button" className="auth-v2-secondary" onClick={onGuest}>
+          <button type="button" className="guest-link" onClick={() => setGuestSetup((open) => !open)}>
             Play without login
           </button>
+          {guestSetup && (
+            <div className="guestSetup">
+              <label>Starting Elo <strong>{guestRating}</strong></label>
+              <input
+                type="range"
+                min="400"
+                max="2400"
+                step="100"
+                value={guestRating}
+                onChange={(event) => setGuestRating(Number(event.target.value))}
+              />
+              <button type="button" className="auth-v2-secondary" onClick={() => onGuest(guestRating)}>
+                Continue as guest
+              </button>
+            </div>
+          )}
         </form>
       </section>
     </main>
@@ -327,11 +406,12 @@ function App() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [moveTracker, setMoveTracker] = useState<MoveTrackerItem[]>([]);
+  const [analysisNotices, setAnalysisNotices] = useState<AnalysisNotice[]>([]);
   const [connected, setConnected] = useState(socket.connected);
-  const [whiteTimeMs, setWhiteTimeMs] = useState(timeControlOptions.rapid.initialTimeMs);
-  const [blackTimeMs, setBlackTimeMs] = useState(timeControlOptions.rapid.initialTimeMs);
-  const [timeControl, setTimeControl] = useState<TimeControl>('rapid');
-  const [botTimeControl, setBotTimeControl] = useState<TimeControl>('rapid');
+  const [whiteTimeMs, setWhiteTimeMs] = useState(timeControlOptions.rapid_10.initialTimeMs);
+  const [blackTimeMs, setBlackTimeMs] = useState(timeControlOptions.rapid_10.initialTimeMs);
+  const [timeControl, setTimeControl] = useState<TimeControl>('rapid_10');
+  const [botTimeControl, setBotTimeControl] = useState<TimeControl>('rapid_10');
   const [botSide, setBotSide] = useState<BotSide>('black');
   const [botElo, setBotElo] = useState(1200);
   const [gameStatus, setGameStatus] = useState('idle');
@@ -340,6 +420,8 @@ function App() {
   const [presence, setPresence] = useState<PresenceState>(emptyPresence(gameId));
   const [playerColor, setPlayerColor] = useState<PlayerColor>('white');
   const [boardWidth, setBoardWidth] = useState(640);
+  const [selectedSquare, setSelectedSquare] = useState('');
+  const [moveSquares, setMoveSquares] = useState<Record<string, React.CSSProperties>>({});
   const gameIdRef = useRef(gameId);
   const gameStatusRef = useRef(gameStatus);
 
@@ -349,8 +431,8 @@ function App() {
 
   useEffect(() => {
     const resize = () => {
-      const sidePanel = window.innerWidth >= 1180 ? 600 : window.innerWidth >= 760 ? 260 : 36;
-      setBoardWidth(Math.max(300, Math.min(640, window.innerWidth - sidePanel)));
+      const sidePanel = window.innerWidth >= 1180 ? 660 : window.innerWidth >= 760 ? 300 : 36;
+      setBoardWidth(Math.max(340, Math.min(720, window.innerWidth - sidePanel)));
     };
     resize();
     window.addEventListener('resize', resize);
@@ -370,27 +452,13 @@ function App() {
     return res.json();
   }
 
-  async function demoLogin() {
-    const suffix = Math.floor(Math.random() * 100000);
-    const payload = { username: `demo${suffix}`, email: `demo${suffix}@chess.local`, password: '123456' };
-    const auth = await fetch(`${api}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then((r) => r.json());
-    localStorage.setItem('token', auth.token);
-    localStorage.setItem('user', JSON.stringify(auth.user));
-    setToken(auth.token);
-    setUser(auth.user);
-  }
-
   const handleAuth = (authToken: string, userData: User) => {
     setToken(authToken);
     setUser(userData);
   };
 
-  const handleGuest = () => {
-    const guest = newGuestUser();
+  const handleGuest = (rating: number) => {
+    const guest = { ...newGuestUser(), rating };
     localStorage.removeItem('token');
     localStorage.setItem('user', JSON.stringify(guest));
     setToken('');
@@ -403,6 +471,9 @@ function App() {
     setFen(chess.fen());
     setPgn('');
     setMoveTracker([]);
+    setAnalysisNotices([]);
+    setSelectedSquare('');
+    setMoveSquares({});
     setWhiteTimeMs(clock);
     setBlackTimeMs(clock);
     setGamePlayers({});
@@ -467,6 +538,8 @@ function App() {
         chess.load(event.fen);
         setFen(event.fen);
       }
+      setSelectedSquare('');
+      setMoveSquares({});
       if (event.pgn) setPgn(event.pgn);
       if (event.san && event.from && event.to) {
         setMoveTracker((items) => {
@@ -514,7 +587,15 @@ function App() {
     socket.on('move.rejected', (event) => setGameStatus(`move rejected: ${event.reason}`));
     socket.on('match:found', joinMatchedGame);
     socket.on('presence:changed', (payload) => setPresence(normalizePresence(payload, gameIdRef.current)));
-    socket.on('draw.offered', (event) => setNotifications((items) => [{ topic: 'draw.offered', event }, ...items]));
+    socket.on('draw.offered', (event) => {
+      setNotifications((items) => [{ topic: 'draw.offered', event }, ...items]);
+      setAnalysisNotices((items) => [{
+        id: `${Date.now()}-draw`,
+        type: 'draw',
+        message: `${shortName(event.fromUserId)} offered a draw`,
+        event
+      }, ...items.slice(0, 5)]);
+    });
     socket.on('friend.invited', (event) => setNotifications((items) => [{ topic: 'friend.invited', event }, ...items]));
     socket.on('chat:message', (event) => setMessages((items) => [...items.slice(-20), event]));
     socket.emit('game:join', { gameId: gameIdRef.current });
@@ -530,17 +611,62 @@ function App() {
       .catch(() => setNotifications([]));
   }
 
-  function onDrop(sourceSquare: string, targetSquare: string) {
+  function canMoveNow() {
     if (!user || !socket.connected || isFinishedStatus(gameStatus)) return false;
     const turnColor = chess.turn() === 'w' ? 'white' : 'black';
     if (playerColor === 'spectator' || playerColor !== turnColor) {
       setGameStatus('not your turn');
       return false;
     }
+    return true;
+  }
+
+  function submitMove(sourceSquare: string, targetSquare: string) {
+    if (!canMoveNow()) return false;
     socket.emit('game:move', { gameId, from: sourceSquare, to: targetSquare, promotion: 'q' }, (ack: any) => {
       if (!ack?.accepted) setGameStatus(`move rejected: ${ack?.reason || 'unknown'}`);
     });
+    setSelectedSquare('');
+    setMoveSquares({});
     return true;
+  }
+
+  function onDrop(sourceSquare: string, targetSquare: string) {
+    return submitMove(sourceSquare, targetSquare);
+  }
+
+  function showMoveHints(square: string) {
+    const moves = chess.moves({ square: square as any, verbose: true }) as any[];
+    if (!moves.length) {
+      setSelectedSquare('');
+      setMoveSquares({});
+      return false;
+    }
+    const styles: Record<string, React.CSSProperties> = {
+      [square]: { background: 'rgba(255, 255, 0, 0.35)' }
+    };
+    for (const move of moves) {
+      styles[move.to] = {
+        background: chess.get(move.to)
+          ? 'radial-gradient(circle, rgba(20, 20, 20, 0.18) 55%, transparent 58%)'
+          : 'radial-gradient(circle, rgba(20, 20, 20, 0.22) 18%, transparent 20%)'
+      };
+    }
+    setSelectedSquare(square);
+    setMoveSquares(styles);
+    return true;
+  }
+
+  function onSquareClick(square: string) {
+    if (!canMoveNow()) return;
+    if (selectedSquare && selectedSquare !== square) {
+      const legal = (chess.moves({ square: selectedSquare as any, verbose: true }) as any[]).some((move) => move.to === square);
+      if (legal) {
+        submitMove(selectedSquare, square);
+        return;
+      }
+    }
+    showMoveHints(square);
   }
 
   async function cancelQueue() {
@@ -596,7 +722,7 @@ function App() {
     setGameId(nextGameId);
     setGamePlayers({ whiteId: body.whiteId, blackId: body.blackId, whiteName: body.whiteId === 'ai-bot' ? 'Stockfish' : user.username, blackName: body.blackId === 'ai-bot' ? 'Stockfish' : user.username });
     socket.emit('game:join', { gameId: nextGameId });
-    const skill = botEloOptions.find((level) => level.elo === botElo)?.skill ?? 6;
+    const skill = skillFromElo(botElo);
     await request(`/ai/games/${nextGameId}/configure`, { method: 'POST', body: JSON.stringify({ botColor: selectedBotSide, fen: chess.fen(), skill }) });
     setGameStatus(`playing Stockfish ${botElo} (${selectedBotSide})`);
   }
@@ -675,24 +801,43 @@ function App() {
     return `vs ${opponent}${result}`;
   }
 
-  if (!user) return <AuthScreen onLogin={handleAuth} onRegister={handleAuth} onDemo={demoLogin} onGuest={handleGuest} />;
+  function moveCountFromGame(g: any) {
+    return Number(g.move_count || g.moves || g.moveNumber || 0);
+  }
+
+  function historyParticipants(g: any) {
+    return {
+      white: g.white_name || shortName(g.white_id),
+      black: g.black_name || shortName(g.black_id)
+    };
+  }
+
+  if (!user) return <AuthScreen onLogin={handleAuth} onRegister={handleAuth} onGuest={handleGuest} />;
+
+  const hasGamePanel = gameStatus === 'active' || gameStatus.startsWith('playing Stockfish') || moveTracker.length > 0 || isFinishedStatus(gameStatus);
+  const shellClass = user.guest ? 'shell guestShell' : 'shell';
 
   return (
-    <main className="shell">
-      <aside className="rail">
-        <h1>Chess Viet</h1>
-        <button onClick={findMatch}><Swords size={18} /> Find Match</button>
-        <button onClick={watchGame}><Eye size={18} /> Watch</button>
-        <button onClick={startAiGame}><Bot size={18} /> AI Bot</button>
-        <button onClick={() => { localStorage.clear(); location.reload(); }}><Users size={18} /> Logout</button>
-      </aside>
+    <main className={shellClass}>
+      {!user.guest && (
+        <aside className="rail">
+          <h1>Chess Viet</h1>
+          <button onClick={findMatch}><Swords size={18} /> Find Match</button>
+          <button onClick={watchGame}><Eye size={18} /> Watch</button>
+          <button onClick={startAiGame}><Bot size={18} /> AI Bot</button>
+          <button onClick={() => { localStorage.clear(); location.reload(); }}><Users size={18} /> Logout</button>
+        </aside>
+      )}
 
       <section className="boardArea">
         <div className="topbar">
           <span><Wifi size={16} /> {connected ? 'Realtime online' : 'Reconnecting'}</span>
-          <input value={gameId} onChange={(e) => setGameId(e.target.value)} />
+          {!user.guest && <input value={gameId} onChange={(e) => setGameId(e.target.value)} />}
           <div className="accountPill"><UserCircle size={17} /> <span>{user.username}</span></div>
-          <div className="notifWrap" onMouseEnter={() => setNotificationOpen(true)} onMouseLeave={() => setNotificationOpen(false)}>
+          {user.guest && (
+            <button className="topbarButton" onClick={() => { localStorage.clear(); location.reload(); }}>Exit guest</button>
+          )}
+          {!user.guest && <div className="notifWrap" onMouseEnter={() => setNotificationOpen(true)} onMouseLeave={() => setNotificationOpen(false)}>
             <button className="iconButton" type="button" onClick={() => setNotificationOpen((open) => !open)}>
               <Bell size={18} />
               {notifications.length > 0 && <span>{notifications.length}</span>}
@@ -702,35 +847,84 @@ function App() {
                 <h3>Notifications</h3>
                 {notifications.length === 0 && <p>No notifications</p>}
                 {notifications.slice(0, 6).map((n, i) => (
-                  <p key={n.id || i}><b>{n.topic}</b><small>{notificationText(n)}</small></p>
+                  <button
+                    className="notifItem"
+                    key={n.id || i}
+                    type="button"
+                    onClick={() => {
+                      const nextGameId = n.event?.gameId || n.event?.matchId;
+                      if (nextGameId) {
+                        setGameId(nextGameId);
+                        socket.emit('game:join', { gameId: nextGameId });
+                      }
+                      setNotificationOpen(false);
+                    }}
+                  >
+                    <b>{n.topic}</b><small>{notificationText(n)}</small>
+                  </button>
                 ))}
               </div>
             )}
-          </div>
+          </div>}
         </div>
 
-        <div className="gameStage">
+        {user.guest && (
+          <section className="guestMatchBar">
+            <div>
+              <h2><Swords size={18} /> Find a guest game</h2>
+              <p>{matchmakingStatus}</p>
+            </div>
+            <TimeControlPicker value={timeControl} onChange={setTimeControl} />
+            <button className="wide" onClick={findMatch} disabled={searching}>{searching ? 'Searching...' : 'Find Match'}</button>
+          </section>
+        )}
+
+        <div className={`gameStage ${!hasGamePanel ? 'boardOnly' : ''}`}>
           <div className="boardColumn">
-            {playerCard(topColor)}
+            {hasGamePanel && playerCard(topColor)}
             <div className="board">
               <Chessboard
                 position={fen}
                 onPieceDrop={onDrop}
+                onSquareClick={onSquareClick}
                 boardOrientation={boardOrientation}
                 boardWidth={boardWidth}
+                customSquareStyles={moveSquares}
                 customDarkSquareStyle={{ backgroundColor: '#779556' }}
                 customLightSquareStyle={{ backgroundColor: '#ebecd0' }}
               />
             </div>
-            {playerCard(bottomColor)}
-            <div className="actionbar">
+            {hasGamePanel && playerCard(bottomColor)}
+            {hasGamePanel && <div className="actionbar">
               <button onClick={resign}><Flag size={16} /> Resign</button>
               <button onClick={offerDraw}><Handshake size={16} /> Draw</button>
               <span>{gameStatus}</span>
-            </div>
+            </div>}
+            {!user.guest && (
+            <section className="historyUnderBoard">
+              <h2><History size={18} /> Match History</h2>
+              <div className="historyStrip">
+                {history.length === 0 && <p className="emptyLine">No games yet</p>}
+                {history.map((g) => {
+                  const players = historyParticipants(g);
+                  const tc = (g.time_control || g.timeControl || 'rapid_10') as TimeControl;
+                  const option = timeControlOptions[tc] || timeControlOptions.rapid_10;
+                  return (
+                    <button className="historyCard" key={g.id} onClick={() => loadReplay(g.id)}>
+                      <span className="historyIcon"><TimeControlIcon group={option.group} /></span>
+                      <span className="historyPlayers"><b>{players.white}</b><b>{players.black}</b></span>
+                      <span className="historyMeta">{option.group} {option.label} · {moveCountFromGame(g)} moves · {g.status}</span>
+                      <strong>{g.result || '*'}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+              {replay.length > 0 && <pre>{replay.slice(-6).map((e) => `${e.event_type}: ${JSON.stringify(e.payload).slice(0, 90)}`).join('\n')}</pre>}
+            </section>
+            )}
           </div>
 
-          <aside className="analysisPanel">
+          {hasGamePanel && <aside className="analysisPanel" style={{ height: boardWidth }}>
             <h2><Swords size={18} /> Move Tracker</h2>
             <div className="tracker chessTracker">
               {trackerRows.length === 0 && <p className="emptyLine">No moves yet</p>}
@@ -746,17 +940,35 @@ function App() {
               <span>Material</span>
               <strong>{trackerRows.length ? formatEval(trackerRows[trackerRows.length - 1].evalScore) : '0.0'}</strong>
             </div>
-          </aside>
+            <div className="analysisNotices">
+              {analysisNotices.map((notice) => (
+                <div className={`analysisNotice ${notice.type}`} key={notice.id}>
+                  <span>{notice.message}</span>
+                  {notice.type === 'draw' && (
+                    <button onClick={() => {
+                      request(`/games/${gameId}/draw`, { method: 'POST', body: JSON.stringify({ accept: true }) });
+                      setAnalysisNotices((items) => items.filter((item) => item.id !== notice.id));
+                    }}>
+                      Accept
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="analysisChat">
+              <h2><MessageSquare size={18} /> Chat</h2>
+              <div className="chat">{messages.map((m, i) => <p key={i}><b>{m.username || shortName(m.userId)}</b> {m.body}</p>)}</div>
+              <form onSubmit={sendMessage}><input name="message" placeholder="Message" /><button>Send</button></form>
+            </div>
+          </aside>}
         </div>
       </section>
 
-      <aside className="panel">
+      {!user.guest && <aside className="panel">
         <section>
           <h2><Swords size={18} /> Play Online</h2>
           <label className="fieldLabel">Time control</label>
-          <select value={timeControl} onChange={(e) => setTimeControl(e.target.value as TimeControl)}>
-            {Object.entries(timeControlOptions).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}
-          </select>
+          <TimeControlPicker value={timeControl} onChange={setTimeControl} />
           <button className="wide" onClick={findMatch} disabled={searching}>{searching ? 'Searching...' : 'Find Match'}</button>
           <p className="statusLine">{matchmakingStatus}</p>
         </section>
@@ -765,9 +977,7 @@ function App() {
           <h2><Bot size={18} /> AI Bot</h2>
           <div className="stackedControls">
             <label className="fieldLabel">Time control</label>
-            <select value={botTimeControl} onChange={(e) => setBotTimeControl(e.target.value as TimeControl)}>
-              {Object.entries(timeControlOptions).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}
-            </select>
+            <TimeControlPicker value={botTimeControl} onChange={setBotTimeControl} />
             <label className="fieldLabel">Your side</label>
             <select value={botSide} onChange={(e) => setBotSide(e.target.value as BotSide)}>
               <option value="black">White</option>
@@ -775,35 +985,12 @@ function App() {
               <option value="random">Random</option>
             </select>
             <label className="fieldLabel">Bot Elo</label>
-            <select value={botElo} onChange={(e) => setBotElo(Number(e.target.value))}>
-              {botEloOptions.map((level) => <option key={level.elo} value={level.elo}>{level.elo}</option>)}
-            </select>
+            <div className="eloSlider">
+              <input type="range" min="400" max="2400" step="100" value={botElo} onChange={(e) => setBotElo(Number(e.target.value))} />
+              <strong>{botElo}</strong>
+            </div>
             <button className="wide" onClick={startAiGame}><Shuffle size={16} /> Start Bot Game</button>
           </div>
-        </section>
-
-        <section>
-          <h2><Eye size={18} /> Spectators</h2>
-          <div className="presenceMeta">
-            <span><Users size={15} /> {presence.playersOnline}/2</span>
-            <span><Eye size={15} /> {presence.spectatorsOnline}</span>
-          </div>
-          <div className="presenceRows">
-            <p><b>White</b><span>{displayPresenceName(presence.white)}</span></p>
-            <p><b>Black</b><span>{displayPresenceName(presence.black)}</span></p>
-          </div>
-          <div className="presenceRows compact">
-            {presence.spectators.length
-              ? presence.spectators.map((person) => <p key={`${person.role}:${person.userId}`}><b>{person.role === 'viewer' ? 'Viewer' : 'Spectator'}</b><span>{displayPresenceName(person)}</span></p>)
-              : <p><b>Spectators</b><span>0 online</span></p>}
-          </div>
-          <button className="wide secondary" onClick={watchGame}>Watch</button>
-        </section>
-
-        <section>
-          <h2><History size={18} /> Match History</h2>
-          <div className="list">{history.map((g) => <button key={g.id} onClick={() => loadReplay(g.id)}>{historyLabel(g)}<small>{g.status}</small></button>)}</div>
-          <pre>{replay.slice(-6).map((e) => `${e.event_type}: ${JSON.stringify(e.payload).slice(0, 90)}`).join('\n')}</pre>
         </section>
 
         {!user.guest && (
@@ -812,13 +999,7 @@ function App() {
             <form onSubmit={inviteFriend}><input name="friendId" placeholder="Friend user id" /><button>Invite</button></form>
           </section>
         )}
-
-        <section>
-          <h2><MessageSquare size={18} /> Chat</h2>
-          <div className="chat">{messages.map((m, i) => <p key={i}><b>{m.username || shortName(m.userId)}</b> {m.body}</p>)}</div>
-          <form onSubmit={sendMessage}><input name="message" placeholder="Message" /><button>Send</button></form>
-        </section>
-      </aside>
+      </aside>}
     </main>
   );
 }

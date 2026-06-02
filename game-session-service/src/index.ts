@@ -24,13 +24,22 @@ const pool = mysql.createPool({
 type AuthedRequest = express.Request & { user?: { id: string; username?: string; guest?: boolean } };
 
 const timeControls: Record<string, { initialTimeMs: number; incrementMs: number }> = {
-  blitz: { initialTimeMs: 180000, incrementMs: 0 },
-  rapid: { initialTimeMs: 600000, incrementMs: 0 },
-  classical: { initialTimeMs: 2700000, incrementMs: 0 }
+  blitz_3: { initialTimeMs: 180000, incrementMs: 0 },
+  blitz_3_1: { initialTimeMs: 180000, incrementMs: 1000 },
+  blitz_5: { initialTimeMs: 300000, incrementMs: 0 },
+  rapid_10: { initialTimeMs: 600000, incrementMs: 0 },
+  rapid_15: { initialTimeMs: 900000, incrementMs: 0 },
+  rapid_30: { initialTimeMs: 1800000, incrementMs: 0 },
+  daily_1: { initialTimeMs: 86400000, incrementMs: 0 },
+  daily_3: { initialTimeMs: 259200000, incrementMs: 0 },
+  daily_7: { initialTimeMs: 604800000, incrementMs: 0 }
 };
 
 function normalizeTimeControl(value: unknown) {
-  return typeof value === 'string' && timeControls[value] ? value : 'rapid';
+  if (value === 'blitz') return 'blitz_3';
+  if (value === 'rapid') return 'rapid_10';
+  if (value === 'classical') return 'daily_1';
+  return typeof value === 'string' && timeControls[value] ? value : 'rapid_10';
 }
 
 function guestIdFrom(req: express.Request) {
@@ -42,9 +51,10 @@ function guestIdFrom(req: express.Request) {
 async function initDb() {
   await pool.query(`CREATE TABLE IF NOT EXISTS games (
     id VARCHAR(36) PRIMARY KEY, white_id VARCHAR(36), black_id VARCHAR(36), status VARCHAR(20),
-    fen TEXT, pgn TEXT, turn VARCHAR(10), winner_id VARCHAR(36) NULL, result VARCHAR(20) NULL,
+    fen TEXT, pgn TEXT, turn VARCHAR(10), time_control VARCHAR(20) NULL, winner_id VARCHAR(36) NULL, result VARCHAR(20) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMP NULL
   )`);
+  await pool.query(`ALTER TABLE games ADD COLUMN time_control VARCHAR(20) NULL`).catch(() => undefined);
   await pool.query(`ALTER TABLE games ADD COLUMN winner_id VARCHAR(36) NULL`).catch(() => undefined);
   await pool.query(`ALTER TABLE games ADD COLUMN result VARCHAR(20) NULL`).catch(() => undefined);
   await pool.query(`CREATE TABLE IF NOT EXISTS game_events (
@@ -107,8 +117,8 @@ async function createGame(event: any) {
   const initialTimeMs = Number(event.initialTimeMs || 300000);
   const incrementMs = Number(event.incrementMs || 0);
   const initialFen = new Chess().fen();
-  await pool.execute('INSERT IGNORE INTO games (id, white_id, black_id, status, fen, turn) VALUES (?, ?, ?, ?, ?, ?)', [
-    event.matchId, event.whiteId, event.blackId, 'active', initialFen, 'white'
+  await pool.execute('INSERT IGNORE INTO games (id, white_id, black_id, status, fen, turn, time_control) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+    event.matchId, event.whiteId, event.blackId, 'active', initialFen, 'white', event.timeControl || 'rapid_10'
   ]);
   await pool.execute('INSERT INTO game_events (game_id, event_type, payload) VALUES (?, ?, ?)', [event.matchId, 'game.created', JSON.stringify(event)]);
   await redis.hSet(`game:${event.matchId}`, {
@@ -342,6 +352,8 @@ app.get('/games', requireAuth, async (req: AuthedRequest, res) => {
   const [rows] = await pool.execute(`
     SELECT
       g.id, g.white_id, g.black_id, g.status, g.result, g.winner_id, g.created_at, g.finished_at,
+      g.time_control,
+      (SELECT COUNT(*) FROM game_events ge WHERE ge.game_id = g.id AND ge.event_type = 'move.played') AS move_count,
       COALESCE(w.username, CASE WHEN g.white_id = 'ai-bot' THEN 'Stockfish' WHEN g.white_id LIKE 'guest-%' THEN CONCAT('Guest ', RIGHT(g.white_id, 4)) ELSE g.white_id END) AS white_name,
       COALESCE(b.username, CASE WHEN g.black_id = 'ai-bot' THEN 'Stockfish' WHEN g.black_id LIKE 'guest-%' THEN CONCAT('Guest ', RIGHT(g.black_id, 4)) ELSE g.black_id END) AS black_name
     FROM games g
@@ -395,7 +407,8 @@ app.post('/games/:id/draw', requireAuth, async (req: AuthedRequest, res, next) =
       if (!colorOf(req.user!.id, state)) throw new Error('player_not_in_game');
       if (req.body.accept === true) return finishGame(gameId, state, 'draw_agreement', null, '1/2-1/2');
       await redis.set(`draw:${gameId}`, req.user!.id, { EX: 60 });
-      await publish('draw.offered', gameId, { gameId, fromUserId: req.user!.id });
+      const toUserId = req.user!.id === state.whiteId ? state.blackId : state.whiteId;
+      await publish('draw.offered', gameId, { gameId, fromUserId: req.user!.id, toUserId, whiteId: state.whiteId, blackId: state.blackId });
       return { offered: true };
     });
     res.json(result);
