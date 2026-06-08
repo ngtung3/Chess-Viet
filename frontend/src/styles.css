@@ -247,8 +247,10 @@ button:disabled {
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 188px minmax(420px, 1fr) 360px;
-  background: #11140f;
+  grid-template-columns: 300px minmax(460px, 1fr);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(127, 166, 80, 0.12), transparent 34%),
+    #10130f;
   color: #f3f5ef;
 }
 
@@ -258,19 +260,32 @@ button:disabled {
 
 .rail {
   padding: 18px 14px;
-  border-right: 1px solid #262c27;
-  background: #171b18;
+  border-right: 1px solid #283029;
+  background: linear-gradient(180deg, #1a1f1b 0%, #131713 100%);
+}
+
+.railBrand {
+  margin-bottom: 22px;
+  padding: 4px 4px 14px;
+  border-bottom: 1px solid #2b332d;
 }
 
 .rail h1 {
-  margin: 0 0 22px;
+  margin: 0;
   font-size: 24px;
+  letter-spacing: 0;
+}
+
+.railBrand span {
+  display: block;
+  margin-top: 5px;
+  color: #9ca79a;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .rail button,
 .actionbar button,
-.panel button,
-.panel form button,
 .controls button,
 .wide {
   border: 0;
@@ -286,22 +301,153 @@ button:disabled {
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
-  padding: 12px;
+  padding: 12px 13px;
   text-align: left;
+  border: 1px solid transparent;
 }
 
 .rail button:hover,
-.actionbar button:hover,
-.panel button:hover {
+.actionbar button:hover {
   background: #343b35;
+}
+
+.railPrimary {
+  background: var(--accent-green) !important;
+  color: #101311 !important;
+}
+
+.railPrimary:hover {
+  background: var(--accent-green-hover) !important;
+}
+
+.railModeTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.railModeTabs button {
+  min-height: 48px;
+  justify-content: center;
+  margin: 0;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.railModeTabs button.active {
+  background: var(--accent-green);
+  color: #101311;
+}
+
+.railSetup {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid #2d332e;
+  border-radius: 8px;
+  background: rgba(15, 18, 15, 0.88);
+}
+
+.railSetup h2 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+}
+
+.railSetup select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #2d332e;
+  border-radius: 6px;
+  background: #0f120f;
+  color: #f3f5ef;
+  padding: 9px 10px;
+}
+
+.railSetup .statusLine {
+  margin: 0;
+}
+
+.railSetup .timeGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.railSetup .timeGrid button {
+  width: 100%;
+  min-height: 62px;
+  margin: 0;
+  padding: 7px 5px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 5px;
+  row-gap: 2px;
+  text-align: left;
+}
+
+.railSetup .timeGrid button b {
+  font-size: 11px;
+}
+
+.railSetup .timeGrid button span {
+  font-size: 10px;
+}
+
+.railSetup .wide {
+  margin: 0;
+  justify-content: center;
+}
+
+.railFriend {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid #2d332e;
+  border-radius: 8px;
+  background: rgba(15, 18, 15, 0.72);
+}
+
+.railFriend h2 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+}
+
+.railFriend form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px;
+}
+
+.railFriend input {
+  min-width: 0;
+  border: 1px solid #2d332e;
+  border-radius: 6px;
+  background: #0f120f;
+  color: #f3f5ef;
+  padding: 9px 10px;
+}
+
+.railFriend button {
+  margin: 0;
+  justify-content: center;
+  padding: 9px 10px;
 }
 
 .boardArea {
   min-width: 0;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 12px;
-  padding: 18px;
+  gap: 14px;
+  padding: 18px 20px 24px;
   align-items: start;
   justify-items: center;
 }
@@ -309,7 +455,7 @@ button:disabled {
 .topbar,
 .players,
 .actionbar {
-  width: min(920px, 100%);
+  width: min(1100px, 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -317,15 +463,15 @@ button:disabled {
 }
 
 .topbar {
-  padding: 10px 12px;
-  border: 1px solid #262c27;
+  padding: 10px;
+  border: 1px solid #2b332d;
   border-radius: 8px;
-  background: #171b18;
+  background: rgba(23, 27, 24, 0.92);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.18);
 }
 
 .topbar span,
 .players span,
-.panel h2,
 .presenceMeta span {
   display: inline-flex;
   align-items: center;
@@ -333,8 +479,7 @@ button:disabled {
 }
 
 .topbar input,
-.panel input,
-.panel select {
+.railFriend input {
   min-width: 0;
   border: 1px solid #2d332e;
   border-radius: 6px;
@@ -364,6 +509,27 @@ button:disabled {
   color: #f3f5ef;
   font-size: 13px;
   font-weight: 700;
+}
+
+.sessionPill {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid #2d332e;
+  border-radius: 6px;
+  background: #20261f;
+  color: #cfd9c8;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sessionPill span {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .accountPill span {
@@ -456,8 +622,9 @@ button:disabled {
 .players {
   padding: 11px 14px;
   border-radius: 8px;
-  background: #171b18;
-  border: 1px solid #262c27;
+  background: #181d19;
+  border: 1px solid #2b332d;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
 }
 
 .players.active {
@@ -466,10 +633,10 @@ button:disabled {
 }
 
 .gameStage {
-  width: min(1080px, 100%);
+  width: min(1100px, 100%);
   display: grid;
-  grid-template-columns: minmax(360px, 1fr) 300px;
-  gap: 14px;
+  grid-template-columns: minmax(380px, 1fr) 312px;
+  gap: 16px;
   align-items: start;
 }
 
@@ -511,7 +678,7 @@ button:disabled {
 .boardColumn {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   justify-items: center;
 }
 
@@ -519,6 +686,11 @@ button:disabled {
   width: 100%;
   display: flex;
   justify-content: center;
+  padding: 10px;
+  border: 1px solid #2b332d;
+  border-radius: 8px;
+  background: #171b18;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.28);
 }
 
 .actionbar button {
@@ -531,22 +703,8 @@ button:disabled {
 .actionbar span {
   color: #b8c2b0;
   margin-left: auto;
-}
-
-.panel {
-  height: 100vh;
-  overflow-y: auto;
-  padding: 14px;
-  border-left: 1px solid #262c27;
-  background: #171b18;
-}
-
-.panel section {
-  margin-bottom: 14px;
-  padding: 14px;
-  border: 1px solid #2d332e;
-  border-radius: 8px;
-  background: #0f120f;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .analysisPanel {
@@ -555,15 +713,15 @@ button:disabled {
   min-height: 360px;
   max-height: 680px;
   display: grid;
-  grid-template-rows: auto minmax(90px, 1fr) auto auto minmax(120px, 0.8fr);
+  grid-template-rows: auto minmax(0, auto) auto auto minmax(160px, 1fr);
   overflow: hidden;
   padding: 14px;
   border: 1px solid #2d332e;
   border-radius: 8px;
-  background: #0f120f;
+  background: rgba(15, 18, 15, 0.94);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.22);
 }
 
-.panel h2,
 .analysisPanel h2 {
   margin: 0 0 12px;
   font-size: 15px;
@@ -574,6 +732,7 @@ button:disabled {
   padding: 12px 14px;
   background: var(--accent-green);
   color: #101311;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.16);
 }
 
 .wide.secondary {
@@ -588,8 +747,7 @@ button:disabled {
   font-size: 13px;
 }
 
-.controls,
-.panel form {
+.controls {
   display: flex;
   gap: 8px;
 }
@@ -615,13 +773,14 @@ button:disabled {
   row-gap: 2px;
   border: 1px solid #2d332e;
   border-radius: 6px;
-  background: #171b18;
+  background: #181d19;
   color: #f3f5ef;
   text-align: left;
 }
 
 .timeGrid button.active {
   border-color: var(--accent-green);
+  background: #20291f;
   box-shadow: inset 0 0 0 1px var(--accent-green);
 }
 
@@ -642,18 +801,17 @@ button:disabled {
   font-weight: 700;
 }
 
-.panel section > select,
 .stackedControls select {
   width: 100%;
 }
 
 .controls select,
-.panel form input {
+.railFriend input {
   flex: 1;
 }
 
 .controls button,
-.panel form button {
+.railFriend button {
   padding: 9px 12px;
 }
 
@@ -709,10 +867,12 @@ button:disabled {
 }
 
 .tracker {
-  max-height: 220px;
+  max-height: 180px;
   overflow-y: auto;
   display: grid;
-  gap: 8px;
+  align-content: start;
+  grid-auto-rows: max-content;
+  gap: 4px;
 }
 
 .trackerRow {
@@ -737,24 +897,24 @@ button:disabled {
 
 .chessTracker {
   min-height: 0;
-  max-height: none;
+  max-height: 180px;
 }
 
 .trackerPair {
-  min-height: 34px;
+  min-height: 26px;
   display: grid;
-  grid-template-columns: 28px 1fr 1fr;
+  grid-template-columns: 24px 1fr 1fr;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
+  gap: 6px;
+  padding: 4px 6px;
   border-radius: 6px;
-  background: #171b18;
-  font-size: 13px;
+  background: #181d19;
+  font-size: 12px;
 }
 
 .trackerPair b {
   color: #7f8a79;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .trackerPair span {
@@ -827,7 +987,7 @@ button:disabled {
   padding: 12px;
   border: 1px solid #2d332e;
   border-radius: 8px;
-  background: #0f120f;
+  background: rgba(15, 18, 15, 0.9);
 }
 
 .historyUnderBoard h2 {
@@ -840,16 +1000,16 @@ button:disabled {
 
 .historyStrip {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 6px;
 }
 
 .historyStrip button {
   min-width: 0;
-  padding: 10px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 6px;
-  background: #171b18;
+  background: #181d19;
   color: #f3f5ef;
   text-align: left;
   font-weight: 800;
@@ -857,8 +1017,8 @@ button:disabled {
 
 .historyCard {
   display: grid;
-  grid-template-columns: 32px 1fr auto;
-  gap: 8px;
+  grid-template-columns: 30px minmax(180px, 1.2fr) minmax(180px, 1fr) auto;
+  gap: 10px;
   align-items: center;
 }
 
@@ -875,8 +1035,9 @@ button:disabled {
 
 .historyPlayers {
   min-width: 0;
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .historyPlayers b {
@@ -885,11 +1046,21 @@ button:disabled {
   white-space: nowrap;
 }
 
+.historyPlayers b + b::before {
+  content: "vs";
+  margin-right: 8px;
+  color: #7f8a79;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .historyMeta {
-  grid-column: 2 / -1;
   color: #b8c2b0;
   font-size: 11px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .historyStrip button small {
@@ -923,20 +1094,11 @@ pre {
 
 @media (max-width: 1080px) {
   .shell {
-    grid-template-columns: 150px minmax(360px, 1fr);
+    grid-template-columns: 280px minmax(360px, 1fr);
   }
 
   .gameStage {
     grid-template-columns: minmax(320px, 1fr) 280px;
-  }
-
-  .panel {
-    grid-column: 1 / -1;
-    height: auto;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    border-left: 0;
-    border-top: 1px solid #262c27;
   }
 }
 
@@ -960,26 +1122,30 @@ pre {
   }
 
   .rail {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    display: block;
     border-right: 0;
     border-bottom: 1px solid #262c27;
   }
 
   .rail h1 {
-    grid-column: 1 / -1;
     margin-bottom: 4px;
   }
 
   .rail button {
     margin: 0;
-    justify-content: center;
     font-size: 12px;
   }
 
-  .panel {
-    grid-template-columns: 1fr;
+  .railBrand {
+    margin-bottom: 12px;
+  }
+
+  .railModeTabs {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .railSetup {
+    margin-bottom: 10px;
   }
 
   .gameStage {
@@ -1001,5 +1167,13 @@ pre {
 
   .topbar input {
     flex: 1 1 100%;
+  }
+
+  .historyCard {
+    grid-template-columns: 30px 1fr auto;
+  }
+
+  .historyMeta {
+    grid-column: 2 / -1;
   }
 }

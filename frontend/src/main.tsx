@@ -8,7 +8,6 @@ import {
   Bot,
   CalendarDays,
   Clock,
-  Eye,
   Flag,
   Handshake,
   History,
@@ -31,6 +30,7 @@ type User = { id: string; username: string; email?: string; rating: number; gues
 type TimeControl = 'blitz_3' | 'blitz_3_1' | 'blitz_5' | 'rapid_10' | 'rapid_15' | 'rapid_30' | 'daily_1' | 'daily_3' | 'daily_7';
 type PlayerColor = 'white' | 'black' | 'spectator';
 type BotSide = 'white' | 'black' | 'random';
+type RailMode = 'match' | 'bot';
 type PresencePerson = {
   userId: string;
   username?: string;
@@ -414,6 +414,7 @@ function App() {
   const [botTimeControl, setBotTimeControl] = useState<TimeControl>('rapid_10');
   const [botSide, setBotSide] = useState<BotSide>('black');
   const [botElo, setBotElo] = useState(1200);
+  const [railMode, setRailMode] = useState<RailMode>('match');
   const [gameStatus, setGameStatus] = useState('idle');
   const [matchmakingStatus, setMatchmakingStatus] = useState('Ready');
   const [searching, setSearching] = useState(false);
@@ -431,7 +432,7 @@ function App() {
 
   useEffect(() => {
     const resize = () => {
-      const sidePanel = window.innerWidth >= 1180 ? 660 : window.innerWidth >= 760 ? 300 : 36;
+      const sidePanel = window.innerWidth >= 1180 ? 420 : window.innerWidth >= 760 ? 300 : 36;
       setBoardWidth(Math.max(340, Math.min(720, window.innerWidth - sidePanel)));
     };
     resize();
@@ -695,15 +696,6 @@ function App() {
     }
   }
 
-  function watchGame() {
-    if (!gameId || !socket.connected) return;
-    setSearching(false);
-    setMatchmakingStatus('Ready');
-    setPlayerColor('spectator');
-    setGameStatus('spectating');
-    socket.emit('game:join', { gameId, spectator: true });
-  }
-
   async function startAiGame() {
     if (!user) return;
     const selectedBotSide = botSide === 'random' ? (Math.random() > 0.5 ? 'white' : 'black') : botSide;
@@ -821,10 +813,45 @@ function App() {
     <main className={shellClass}>
       {!user.guest && (
         <aside className="rail">
-          <h1>Chess Viet</h1>
-          <button onClick={findMatch}><Swords size={18} /> Find Match</button>
-          <button onClick={watchGame}><Eye size={18} /> Watch</button>
-          <button onClick={startAiGame}><Bot size={18} /> AI Bot</button>
+          <div className="railBrand">
+            <h1>Chess Viet</h1>
+            <span>Realtime chess</span>
+          </div>
+          <div className="railModeTabs">
+            <button type="button" className={railMode === 'match' ? 'active' : ''} onClick={() => setRailMode('match')}><Swords size={18} /> Find Match</button>
+            <button type="button" className={railMode === 'bot' ? 'active' : ''} onClick={() => setRailMode('bot')}><Bot size={18} /> AI Bot</button>
+          </div>
+          <section className="railSetup">
+            {railMode === 'match' ? (
+              <>
+                <h2><Swords size={17} /> Online Match</h2>
+                <TimeControlPicker value={timeControl} onChange={setTimeControl} />
+                <button className="wide" onClick={findMatch} disabled={searching}>{searching ? 'Searching...' : 'Start Search'}</button>
+                <p className="statusLine">{matchmakingStatus}</p>
+              </>
+            ) : (
+              <>
+                <h2><Bot size={17} /> Bot Match</h2>
+                <TimeControlPicker value={botTimeControl} onChange={setBotTimeControl} />
+                <label className="fieldLabel">Your side</label>
+                <select value={botSide} onChange={(e) => setBotSide(e.target.value as BotSide)}>
+                  <option value="black">White</option>
+                  <option value="white">Black</option>
+                  <option value="random">Random</option>
+                </select>
+                <label className="fieldLabel">Bot Elo</label>
+                <div className="eloSlider">
+                  <input type="range" min="400" max="2400" step="100" value={botElo} onChange={(e) => setBotElo(Number(e.target.value))} />
+                  <strong>{botElo}</strong>
+                </div>
+                <button className="wide" onClick={startAiGame}><Shuffle size={16} /> Start Bot Game</button>
+              </>
+            )}
+          </section>
+          <section className="railFriend">
+            <h2><Users size={17} /> Friend Invite</h2>
+            <form onSubmit={inviteFriend}><input name="friendId" placeholder="Friend user id" /><button>Invite</button></form>
+          </section>
           <button onClick={() => { localStorage.clear(); location.reload(); }}><Users size={18} /> Logout</button>
         </aside>
       )}
@@ -832,7 +859,7 @@ function App() {
       <section className="boardArea">
         <div className="topbar">
           <span><Wifi size={16} /> {connected ? 'Realtime online' : 'Reconnecting'}</span>
-          {!user.guest && <input value={gameId} onChange={(e) => setGameId(e.target.value)} />}
+          {!user.guest && <div className="sessionPill"><Swords size={15} /> <span>{gameStatus === 'idle' ? 'No active game' : shortName(gameId)}</span></div>}
           <div className="accountPill"><UserCircle size={17} /> <span>{user.username}</span></div>
           {user.guest && (
             <button className="topbarButton" onClick={() => { localStorage.clear(); location.reload(); }}>Exit guest</button>
@@ -919,7 +946,6 @@ function App() {
                   );
                 })}
               </div>
-              {replay.length > 0 && <pre>{replay.slice(-6).map((e) => `${e.event_type}: ${JSON.stringify(e.payload).slice(0, 90)}`).join('\n')}</pre>}
             </section>
             )}
           </div>
@@ -964,42 +990,6 @@ function App() {
         </div>
       </section>
 
-      {!user.guest && <aside className="panel">
-        <section>
-          <h2><Swords size={18} /> Play Online</h2>
-          <label className="fieldLabel">Time control</label>
-          <TimeControlPicker value={timeControl} onChange={setTimeControl} />
-          <button className="wide" onClick={findMatch} disabled={searching}>{searching ? 'Searching...' : 'Find Match'}</button>
-          <p className="statusLine">{matchmakingStatus}</p>
-        </section>
-
-        <section>
-          <h2><Bot size={18} /> AI Bot</h2>
-          <div className="stackedControls">
-            <label className="fieldLabel">Time control</label>
-            <TimeControlPicker value={botTimeControl} onChange={setBotTimeControl} />
-            <label className="fieldLabel">Your side</label>
-            <select value={botSide} onChange={(e) => setBotSide(e.target.value as BotSide)}>
-              <option value="black">White</option>
-              <option value="white">Black</option>
-              <option value="random">Random</option>
-            </select>
-            <label className="fieldLabel">Bot Elo</label>
-            <div className="eloSlider">
-              <input type="range" min="400" max="2400" step="100" value={botElo} onChange={(e) => setBotElo(Number(e.target.value))} />
-              <strong>{botElo}</strong>
-            </div>
-            <button className="wide" onClick={startAiGame}><Shuffle size={16} /> Start Bot Game</button>
-          </div>
-        </section>
-
-        {!user.guest && (
-          <section>
-            <h2><Users size={18} /> Friend Invite</h2>
-            <form onSubmit={inviteFriend}><input name="friendId" placeholder="Friend user id" /><button>Invite</button></form>
-          </section>
-        )}
-      </aside>}
     </main>
   );
 }
