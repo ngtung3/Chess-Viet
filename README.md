@@ -8,7 +8,7 @@ Demo microservices cho website chơi cờ vua online realtime. Scope hiện tạ
 
 ## Kiến Trúc
 ### Kiến trúc Microservice
-<img width="1536" height="1024" alt="1" src="https://github.com/user-attachments/assets/80e44935-22a7-4bd6-a806-cf10505f9516" />
+<img width="998" height="698" alt="UML" src="https://github.com/user-attachments/assets/c593875d-612f-4155-af47-c307f10045fc" />
 
 ```text
 Browser React/Vite
