@@ -1,29 +1,18 @@
 {
   "topics": [
-    {
-      "name": "user-events",
-      "numPartitions": 3,
-      "replicationFactor": 1
-    },
-    {
-      "name": "matchmaking-events",
-      "numPartitions": 3,
-      "replicationFactor": 1
-    },
-    {
-      "name": "game-events",
-      "numPartitions": 6,
-      "replicationFactor": 1
-    },
-    {
-      "name": "move-validation-events",
-      "numPartitions": 4,
-      "replicationFactor": 1
-    },
-    {
-      "name": "notification-events",
-      "numPartitions": 2,
-      "replicationFactor": 1
-    }
+    { "name": "user.registered", "numPartitions": 2, "replicationFactor": 1 },
+    { "name": "friend.requested", "numPartitions": 2, "replicationFactor": 1 },
+    { "name": "friend.responded", "numPartitions": 2, "replicationFactor": 1 },
+    { "name": "friend.invited", "numPartitions": 2, "replicationFactor": 1 },
+    { "name": "match.created", "numPartitions": 3, "replicationFactor": 1 },
+    { "name": "game.started", "numPartitions": 6, "replicationFactor": 1 },
+    { "name": "game.finished", "numPartitions": 6, "replicationFactor": 1 },
+    { "name": "move.requested", "numPartitions": 4, "replicationFactor": 1 },
+    { "name": "move.validated", "numPartitions": 4, "replicationFactor": 1 },
+    { "name": "move.rejected", "numPartitions": 4, "replicationFactor": 1 },
+    { "name": "move.played", "numPartitions": 6, "replicationFactor": 1 },
+    { "name": "timer.tick", "numPartitions": 3, "replicationFactor": 1 },
+    { "name": "draw.offered", "numPartitions": 2, "replicationFactor": 1 },
+    { "name": "chat.message.sent", "numPartitions": 2, "replicationFactor": 1 }
   ]
 }

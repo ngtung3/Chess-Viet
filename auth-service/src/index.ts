@@ -75,7 +75,9 @@ async function initDb() {
     addressee_id VARCHAR(36) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_friend_pair (requester_id, addressee_id)
+    UNIQUE KEY unique_friend_pair (requester_id, addressee_id), 
+    CONSTRAINT fk_friends_requester FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_friends_addressee FOREIGN KEY (addressee_id) REFERENCES users(id) ON DELETE CASCADE 
   )`);
 }
 
