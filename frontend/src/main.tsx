@@ -12,11 +12,9 @@ import {
   Handshake,
   History,
   MessageSquare,
-  Shuffle,
   Swords,
   Timer,
   UserCircle,
-  Users,
   Zap,
   Wifi
 } from 'lucide-react';
@@ -32,7 +30,6 @@ type TimeControl = 'bullet_1' | 'bullet_1_1' | 'bullet_2_1' |
   'rapid_10' | 'rapid_15' | 'rapid_30';
 type PlayerColor = 'white' | 'black' | 'spectator';
 type BotSide = 'white' | 'black' | 'random';
-type RailMode = 'match' | 'bot';
 type PresencePerson = {
   userId: string;
   username?: string;
@@ -418,7 +415,7 @@ function App() {
   const [botTimeControl, setBotTimeControl] = useState<TimeControl>('rapid_10');
   const [botSide, setBotSide] = useState<BotSide>('black');
   const [botElo, setBotElo] = useState(1200);
-  const [railMode, setRailMode] = useState<RailMode>('match');
+  const [botSetupOpen, setBotSetupOpen] = useState(false);
   const [gameStatus, setGameStatus] = useState('idle');
   const [matchmakingStatus, setMatchmakingStatus] = useState('Ready');
   const [searching, setSearching] = useState(false);
@@ -755,6 +752,14 @@ function App() {
 
   async function resign() {
     await request(`/games/${gameId}/resign`, { method: 'POST', body: '{}' });
+    setGameStatus('resigned');
+  }
+
+  function returnToLobby() {
+    resetBoard(timeControl);
+    setSearching(false);
+    setMatchmakingStatus('Ready');
+    setGameStatus('idle');
   }
 
   async function offerDraw() {
@@ -895,7 +900,7 @@ function App() {
   }
 
   function playerCard(color: 'white' | 'black') {
-    const active = chess.turn() === (color === 'white' ? 'w' : 'b') && gameStatus === 'active';
+    const active = chess.turn() === (color === 'white' ? 'w' : 'b') && !isFinishedStatus(gameStatus) && gameStatus !== 'creating';
     const time = color === 'white' ? whiteTimeMs : blackTimeMs;
     return (
       <div className={`players ${active ? 'active' : ''}`}>
@@ -921,13 +926,6 @@ function App() {
     return rows;
   }, {});
 
-  function historyLabel(g: any) {
-    const myColor = g.white_id === user?.id ? 'white' : 'black';
-    const opponent = myColor === 'white' ? g.black_name || shortName(g.black_id) : g.white_name || shortName(g.white_id);
-    const result = g.result ? ` - ${g.result}` : '';
-    return `vs ${opponent}${result}`;
-  }
-
   function moveCountFromGame(g: any) {
     return Number(g.move_count || g.moves || g.moveNumber || 0);
   }
@@ -941,56 +939,58 @@ function App() {
 
   if (!user) return <AuthScreen onLogin={handleAuth} onRegister={handleAuth} onGuest={handleGuest} />;
 
-  const hasGamePanel = gameStatus === 'active' || gameStatus.startsWith('playing Stockfish') || moveTracker.length > 0 || isFinishedStatus(gameStatus);
-  const shellClass = user.guest ? 'shell guestShell' : 'shell';
+  // Once the lobby has handed off to a game, keep the gameplay controls visible
+  // even when the backend reports an intermediate status such as "started" or
+  // "move rejected". The backend may not use the exact UI status strings.
+  const hasGamePanel = gameStatus !== 'creating';
+  if (gameStatus === 'idle' || gameStatus === 'matchmaking failed' || gameStatus === 'Searching...') {
+    return (
+      <main className="quickLobby">
+        <header className="quickTopbar">
+          <a className="quickBrand" href="#"><span className="brandMark">♘</span> Chess Viet</a>
+          <div className="quickTopActions">
+            <span><UserCircle size={17} /> {user.username}{user.guest ? ' · Guest' : ''}</span>
+            {!user.guest && <button type="button" onClick={() => { localStorage.clear(); location.reload(); }}>Logout</button>}
+            {user.guest && <button type="button" onClick={() => { localStorage.clear(); location.reload(); }}>Exit guest</button>}
+          </div>
+        </header>
+        <section className="quickContent">
+          <aside className="quickIntro">
+            <h1>Ready to play?</h1>
+            <p>Choose a time control and find an opponent.</p>
+            <div className="quickInfo"><Wifi size={17} /> {connected ? 'Realtime online' : 'Reconnecting'}</div>
+            {!user.guest && <div className="quickInfo"><History size={17} /> {history.length} games played</div>}
+            <p className="quickAbout">Chess Viet · Online chess</p>
+          </aside>
+          <section className="quickPicker">
+            <div className="quickTab">Quick pairing</div>
+            <TimeControlPicker value={timeControl} onChange={setTimeControl} />
+            <button className="quickStart" onClick={findMatch} disabled={searching}>
+              <Swords size={18} /> {searching ? 'Searching...' : `Find ${timeControlOptions[timeControl].group} game`}
+            </button>
+            <p className={`quickStatus ${searching ? 'isSearching' : ''}`}>{matchmakingStatus}</p>
+          </section>
+          <aside className="quickActions">
+            <button type="button" onClick={() => setBotSetupOpen((open) => !open)}><Bot size={20} /> <span>Play against computer<small>Choose side and bot strength</small></span></button>
+            {botSetupOpen && <section className="quickBotSetup">
+              <b>Bot game settings</b>
+              <TimeControlPicker value={botTimeControl} onChange={setBotTimeControl} />
+              <label>Your side</label>
+              <select value={botSide} onChange={(event) => setBotSide(event.target.value as BotSide)}><option value="black">White</option><option value="white">Black</option><option value="random">Random</option></select>
+              <label>Bot strength <strong>{botElo}</strong></label>
+              <input type="range" min="400" max="2400" step="100" value={botElo} onChange={(event) => setBotElo(Number(event.target.value))} />
+              <button className="quickStart" type="button" onClick={startAiGame}>Start bot game</button>
+            </section>}
+            {!user.guest && <form className="quickFriend" onSubmit={inviteFriend}><label>Challenge a friend</label><div><input name="friendId" placeholder="Friend user ID" /><button>Invite</button></div></form>}
+            {!user.guest && <div className="quickRecent"><b>Match History</b>{history.length === 0 && <small>No games yet</small>}{history.map((g) => { const players = historyParticipants(g); const tc = (g.time_control || g.timeControl || 'rapid_10') as TimeControl; const option = timeControlOptions[tc] || timeControlOptions.rapid_10; return <button key={g.id} type="button" onClick={() => loadReplay(g.id)}>{players.white} vs {players.black}<small>{option.group} {option.label} · {moveCountFromGame(g)} moves · {g.status}</small></button>; })}</div>}
+          </aside>
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <main className={shellClass}>
-      {!user.guest && (
-        <aside className="rail">
-          <div className="railBrand">
-            <h1>Chess Viet</h1>
-            <span>Realtime chess</span>
-          </div>
-          <div className="railModeTabs">
-            <button type="button" className={railMode === 'match' ? 'active' : ''} onClick={() => setRailMode('match')}><Swords size={18} /> Find Match</button>
-            <button type="button" className={railMode === 'bot' ? 'active' : ''} onClick={() => setRailMode('bot')}><Bot size={18} /> AI Bot</button>
-          </div>
-          <section className="railSetup">
-            {railMode === 'match' ? (
-              <>
-                <h2><Swords size={17} /> Online Match</h2>
-                <TimeControlPicker value={timeControl} onChange={setTimeControl} />
-                <button className="wide" onClick={findMatch} disabled={searching}>{searching ? 'Searching...' : 'Start Search'}</button>
-                <p className="statusLine">{matchmakingStatus}</p>
-              </>
-            ) : (
-              <>
-                <h2><Bot size={17} /> Bot Match</h2>
-                <TimeControlPicker value={botTimeControl} onChange={setBotTimeControl} />
-                <label className="fieldLabel">Your side</label>
-                <select value={botSide} onChange={(e) => setBotSide(e.target.value as BotSide)}>
-                  <option value="black">White</option>
-                  <option value="white">Black</option>
-                  <option value="random">Random</option>
-                </select>
-                <label className="fieldLabel">Bot Elo</label>
-                <div className="eloSlider">
-                  <input type="range" min="400" max="2400" step="100" value={botElo} onChange={(e) => setBotElo(Number(e.target.value))} />
-                  <strong>{botElo}</strong>
-                </div>
-                <button className="wide" onClick={startAiGame}><Shuffle size={16} /> Start Bot Game</button>
-              </>
-            )}
-          </section>
-          <section className="railFriend">
-            <h2><Users size={17} /> Friend Invite</h2>
-            <form onSubmit={inviteFriend}><input name="friendId" placeholder="Friend user id" /><button>Invite</button></form>
-          </section>
-          <button onClick={() => { localStorage.clear(); location.reload(); }}><Users size={18} /> Logout</button>
-        </aside>
-      )}
-
+    <main className="gameShell">
       <section className="boardArea">
         <div className="topbar">
           <span><Wifi size={16} /> {connected ? 'Realtime online' : 'Reconnecting'}</span>
@@ -1030,17 +1030,6 @@ function App() {
           </div>}
         </div>
 
-        {user.guest && (
-          <section className="guestMatchBar">
-            <div>
-              <h2><Swords size={18} /> Find a guest game</h2>
-              <p>{matchmakingStatus}</p>
-            </div>
-            <TimeControlPicker value={timeControl} onChange={setTimeControl} />
-            <button className="wide" onClick={findMatch} disabled={searching}>{searching ? 'Searching...' : 'Find Match'}</button>
-          </section>
-        )}
-
         <div className={`gameStage ${!hasGamePanel ? 'boardOnly' : ''}`}>
           <div className="boardColumn">
             {hasGamePanel && playerCard(topColor)}
@@ -1071,8 +1060,10 @@ function App() {
             )}
             {hasGamePanel && !replayMode && (
               <div className="actionbar">
-                <button onClick={resign}><Flag size={16} /> Resign</button>
-                <button onClick={offerDraw}><Handshake size={16} /> Draw</button>
+                {isFinishedStatus(gameStatus) ? <button onClick={returnToLobby}><History size={16} /> Return to main page</button> : <>
+                  <button onClick={resign}><Flag size={16} /> Resign</button>
+                  <button onClick={offerDraw}><Handshake size={16} /> Draw</button>
+                </>}
                 <span>{gameStatus}</span>
               </div>
             )}
