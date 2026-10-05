@@ -24,21 +24,21 @@ const pool = mysql.createPool({
 type AuthedRequest = express.Request & { user?: { id: string; username?: string; guest?: boolean } };
 
 const timeControls: Record<string, { initialTimeMs: number; incrementMs: number }> = {
+  bullet_1: { initialTimeMs: 60000, incrementMs: 0 },
+  bullet_1_1: { initialTimeMs: 60000, incrementMs: 1000 },
+  bullet_2: { initialTimeMs: 120000, incrementMs: 0 },
   blitz_3: { initialTimeMs: 180000, incrementMs: 0 },
   blitz_3_1: { initialTimeMs: 180000, incrementMs: 1000 },
   blitz_5: { initialTimeMs: 300000, incrementMs: 0 },
   rapid_10: { initialTimeMs: 600000, incrementMs: 0 },
   rapid_15: { initialTimeMs: 900000, incrementMs: 0 },
-  rapid_30: { initialTimeMs: 1800000, incrementMs: 0 },
-  daily_1: { initialTimeMs: 86400000, incrementMs: 0 },
-  daily_3: { initialTimeMs: 259200000, incrementMs: 0 },
-  daily_7: { initialTimeMs: 604800000, incrementMs: 0 }
+  rapid_30: { initialTimeMs: 1800000, incrementMs: 0 }
 };
 
 function normalizeTimeControl(value: unknown) {
+  if (value === 'bullet') return 'bullet_1';
   if (value === 'blitz') return 'blitz_3';
   if (value === 'rapid') return 'rapid_10';
-  if (value === 'classical') return 'daily_1';
   return typeof value === 'string' && timeControls[value] ? value : 'rapid_10';
 }
 
@@ -155,10 +155,15 @@ function colorOf(playerId: string, state: Record<string, string>) {
   return null;
 }
 
-async function finishGame(gameId: string, state: Record<string, string>, reason: string, winnerId: string | null, result: string, patch: Record<string, string> = {}) {
+async function finishGame(gameId: string, state: Record<string, string>, reason: string, 
+                          winnerId: string | null, result: string, patch: Record<string, string> = {}) {
   if (state.status === 'finished') return { gameId, winnerId, loserId: winnerId ? (winnerId === state.whiteId ? state.blackId : state.whiteId) : null, result, reason, fen: patch.fen || state.fen, pgn: patch.pgn || state.pgn || '' };
   const loserId = winnerId ? (winnerId === state.whiteId ? state.blackId : state.whiteId) : null;
-  const finished = { gameId, winnerId, loserId, result, reason, fen: patch.fen || state.fen, pgn: patch.pgn || state.pgn || '' };
+  const finished = { 
+    gameId, winnerId, loserId, result, reason, 
+    whiteId: state.whiteId, blackId: state.blackId,
+    fen: patch.fen || state.fen, pgn: patch.pgn || state.pgn || '' 
+  };
   await redis.hSet(`game:${gameId}`, { ...patch, status: 'finished', winnerId: winnerId || '', result, finishReason: reason });
   await pool.execute('UPDATE games SET fen = ?, pgn = ?, status = ?, winner_id = ?, result = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?', [
     finished.fen,

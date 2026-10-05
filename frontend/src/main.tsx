@@ -6,7 +6,7 @@ import { io } from 'socket.io-client';
 import {
   Bell,
   Bot,
-  CalendarDays,
+  Rocket,
   Clock,
   Flag,
   Handshake,
@@ -27,7 +27,9 @@ const api = import.meta.env.VITE_API_URL || '/api';
 const socket = io(import.meta.env.VITE_WS_URL || '/', { transports: ['websocket'], autoConnect: false, reconnection: true });
 
 type User = { id: string; username: string; email?: string; rating: number; guest?: boolean };
-type TimeControl = 'blitz_3' | 'blitz_3_1' | 'blitz_5' | 'rapid_10' | 'rapid_15' | 'rapid_30' | 'daily_1' | 'daily_3' | 'daily_7';
+type TimeControl = 'bullet_1' | 'bullet_1_1' | 'bullet_2' | 
+                  'blitz_3' | 'blitz_3_1' | 'blitz_5' | 
+                  'rapid_10' | 'rapid_15' | 'rapid_30' ;
 type PlayerColor = 'white' | 'black' | 'spectator';
 type BotSide = 'white' | 'black' | 'random';
 type RailMode = 'match' | 'bot';
@@ -73,16 +75,16 @@ type GamePlayers = {
   blackName?: string;
 };
 
-const timeControlOptions: Record<TimeControl, { label: string; group: 'Blitz' | 'Rapid' | 'Daily'; initialTimeMs: number; incrementMs: number }> = {
+const timeControlOptions: Record<TimeControl, { label: string; group: 'Bullet' | 'Blitz' | 'Rapid'; initialTimeMs: number; incrementMs: number }> = {
+  bullet_1: { label: '1p', group: 'Bullet', initialTimeMs: 60000, incrementMs: 0 },
+  bullet_1_1: { label: '1p + 1', group: 'Bullet', initialTimeMs: 60000, incrementMs: 1000 },
+  bullet_2: { label: '2p', group: 'Bullet', initialTimeMs: 120000, incrementMs: 0 },
   blitz_3: { label: '3 min', group: 'Blitz', initialTimeMs: 180000, incrementMs: 0 },
   blitz_3_1: { label: '3+1', group: 'Blitz', initialTimeMs: 180000, incrementMs: 1000 },
   blitz_5: { label: '5 min', group: 'Blitz', initialTimeMs: 300000, incrementMs: 0 },
   rapid_10: { label: '10 min', group: 'Rapid', initialTimeMs: 600000, incrementMs: 0 },
   rapid_15: { label: '15 min', group: 'Rapid', initialTimeMs: 900000, incrementMs: 0 },
-  rapid_30: { label: '30 min', group: 'Rapid', initialTimeMs: 1800000, incrementMs: 0 },
-  daily_1: { label: '1 day', group: 'Daily', initialTimeMs: 86400000, incrementMs: 0 },
-  daily_3: { label: '3 days', group: 'Daily', initialTimeMs: 259200000, incrementMs: 0 },
-  daily_7: { label: '7 days', group: 'Daily', initialTimeMs: 604800000, incrementMs: 0 }
+  rapid_30: { label: '30 min', group: 'Rapid', initialTimeMs: 1800000, incrementMs: 0 }
 };
 
 function authHeaders(token: string) {
@@ -177,9 +179,9 @@ function notificationText(n: any) {
   return n.topic || 'Notification';
 }
 
-function TimeControlIcon({ group }: { group: 'Blitz' | 'Rapid' | 'Daily' }) {
+function TimeControlIcon({ group }: { group: 'Bullet' | 'Blitz' | 'Rapid' }) {
+  if (group === 'Bullet') return <Rocket size={15} />;
   if (group === 'Blitz') return <Zap size={15} />;
-  if (group === 'Daily') return <CalendarDays size={15} />;
   return <Timer size={15} />;
 }
 

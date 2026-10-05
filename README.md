@@ -3,7 +3,6 @@
 Demo microservices cho website chơi cờ vua online realtime. Scope hiện tại đã được rút gọn để dễ demo môn Hệ thống phân tán:
 
 - Giữ: realtime chess, JWT auth, matchmaking theo Elo, AI bot đơn giản, chat, replay, notification, Redis locking, Kafka event flow, monitoring.
-- Bỏ khỏi luồng chạy chính: tournament mode và leaderboard.
 - AI bot chỉ còn một chế độ đơn giản: chọn ngẫu nhiên một nước hợp lệ.
 
 ## Kiến Trúc
@@ -47,7 +46,7 @@ Prometheus/Grafana: scrape /metrics endpoints
 | ai-bot-service | 3011 | Bot đơn giản chọn nước hợp lệ ngẫu nhiên |
 | prometheus | 9090 | Metrics |
 | grafana | 3008 | Dashboard, admin/admin |
-| jaeger | 16686 | Tracing UI placeholder |
+
 
 ## Chạy Local
 

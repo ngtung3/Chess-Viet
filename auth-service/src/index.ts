@@ -12,6 +12,7 @@ const port = Number(process.env.PORT || 3001);
 const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';
 const kafka = new Kafka({ clientId: service, brokers: (process.env.KAFKA_BROKERS || 'kafka:9092').split(',') });
 const producer = kafka.producer();
+const consumer = kafka.consumer({ groupId: `${service}-group` });
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'mysql',
   port: Number(process.env.DB_PORT || 3306),
@@ -34,6 +35,19 @@ async function publish(topic: string, key: string, value: object) {
   } catch (error) {
     console.warn('kafka unavailable', error);
   }
+}
+
+async function applyGameResult(payload: { winnerId: string | null; loserId: string | null; 
+                                whiteId?: string; blackId?: string; result: string }) {
+  const K = 16;
+  if (payload.winnerId && payload.loserId) {
+    await pool.execute('UPDATE users SET rating = rating + ?, wins = wins + 1 WHERE id = ?', [K, payload.winnerId]);
+    await pool.execute('UPDATE users SET rating = GREATEST(rating - ?, 0), losses = losses + 1 WHERE id = ?', [K, payload.loserId]);
+    return;
+  }
+  // Hòa: winnerId/loserId đều null, dùng whiteId/blackId thay thế
+  if (payload.whiteId) await pool.execute('UPDATE users SET draws = draws + 1 WHERE id = ?', [payload.whiteId]);
+  if (payload.blackId) await pool.execute('UPDATE users SET draws = draws + 1 WHERE id = ?', [payload.blackId]);
 }
 
 function tokenFor(user: { id: string; username: string; email: string; rating: number }) {
@@ -173,6 +187,19 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 async function main() {
   await retry('mysql', initDb);
   await producer.connect().catch(() => undefined);
+  await consumer.connect().catch(() => undefined);
+  await consumer.subscribe({ topic: 'game.finished', fromBeginning: false });
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      if (!message.value) return;
+      try {
+        const payload = JSON.parse(message.value.toString());
+        await applyGameResult(payload);
+      } catch (error) {
+        console.warn('failed to apply game result', error);
+      }
+    }
+  });
   app.listen(port, () => console.log(`${service} listening on ${port}`));
 }
 
