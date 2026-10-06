@@ -1177,3 +1177,107 @@ pre {
     grid-column: 2 / -1;
   }
 }
+
+.panelTabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.panelTabs button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+}
+.panelTabs button.active {
+  color: #fff;
+  border-bottom-color: #4f7a3d;
+}
+
+.engineBox {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.engineBoxHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+.engineBoxHead button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.engineLine {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.engineLine:first-of-type { border-top: none; }
+.engineEval {
+  flex-shrink: 0;
+  width: 46px;
+  font-weight: 700;
+  color: #8fbf6f;
+}
+.engineMoves {
+  color: rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysisPanel.replayPanel {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 560px;
+  max-height: 80vh;
+}
+.analysisPanel.replayPanel .chessTracker {
+  max-height: none;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.engineSpinner {
+  font-size: 12px;
+  color: #8fbf6f;
+  font-style: italic;
+}
+
+.chessTracker::-webkit-scrollbar {
+  width: 6px;
+}
+.chessTracker::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chessTracker::-webkit-scrollbar-thumb {
+  background-color: #000000;
+  border-radius: 5px;
+}
+.chessTracker::-webkit-scrollbar-thumb:hover {
+  background-color: #808080;
+}
