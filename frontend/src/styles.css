@@ -1092,6 +1092,99 @@ pre {
   font-size: 13px;
 }
 
+/* Quick pairing lobby shown after sign in or guest entry. */
+.quickLobby {
+  min-height: 100vh;
+  color: #e6e3df;
+  background: radial-gradient(ellipse at 52% -10%, #273326 0%, #171c17 52%, #101310 100%);
+}
+
+.quickTopbar {
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 max(24px, calc((100vw - 1320px) / 2));
+  background: rgba(18, 23, 18, .94);
+  border-bottom: 1px solid #303a30;
+}
+
+.quickBrand { display: inline-flex; align-items: center; gap: 11px; color: #e5ebe1; text-decoration: none; font-size: 22px; }
+.brandMark { font-size: 31px; color: #aaa6a0; }
+.quickTopActions, .quickTopActions span { display: flex; align-items: center; gap: 16px; color: #aaa6a0; font-size: 13px; }
+.quickTopActions span { gap: 7px; }
+.quickTopActions button { border: 0; background: none; color: #7db8e8; font-weight: 700; }
+.quickContent { width: min(1200px, calc(100% - 40px)); margin: 38px auto 0; display: grid; grid-template-columns: minmax(190px, 260px) minmax(500px, 700px) minmax(210px, 280px); gap: 16px; align-items: center; }
+.quickIntro { align-self: start; padding-top: 12px; }
+.quickIntro h1 { margin: 0 0 8px; font-size: 22px; }
+.quickIntro p { color: #aaa6a0; font-size: 13px; line-height: 1.5; }
+.quickInfo { display: flex; gap: 8px; align-items: center; margin-top: 14px; color: #aaa6a0; font-size: 13px; }
+.quickAbout { margin-top: 42px; }
+.quickPicker { align-self: start; }
+.quickTab { height: 42px; display: grid; place-items: center; border-bottom: 2px solid var(--accent-green); color: #a8cd83; font-size: 13px; }
+.quickPicker .timeGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.quickPicker .timeGrid button { min-height: 112px; display: flex; flex-direction: column; justify-content: center; gap: 6px; border: 1px solid #303a30; border-radius: 7px; background: #202720; color: #d3dbce; text-align: center; }
+.quickPicker .timeGrid button svg { display: none; }
+.quickPicker .timeGrid button span { order: 2; color: #a9b4a2; font-size: 17px; font-weight: 400; }
+.quickPicker .timeGrid button b { order: 1; font-size: 24px; font-weight: 400; }
+.quickPicker .timeGrid button.active { background: #2b3828; border-color: var(--accent-green); box-shadow: inset 0 0 0 1px var(--accent-green); }
+.quickPicker .timeGrid button:hover { background: #2a3329; }
+.quickStart { width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 12px; border: 0; border-radius: 6px; background: #81a94f; color: #151712; font-weight: 800; }
+.quickStart:hover { background: #91b85e; }
+.quickStatus { min-height: 18px; color: #a9b4a2; font-size: 12px; text-align: center; }
+.quickStatus.isSearching { color: #a8cd83; font-weight: 700; }
+.quickActions { display: grid; gap: 10px; }
+.quickActions > button { min-height: 58px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #303a30; border-radius: 7px; background: #252d24; color: #e3e9df; text-align: left; font-weight: 700; }
+.quickActions > button:hover { background: #303b2e; }
+.quickActions > button small, .quickRecent small { display: block; margin-top: 4px; color: #aaa6a0; font-size: 11px; font-weight: 400; }
+.quickFriend, .quickRecent { padding: 13px; border: 1px solid #303a30; border-radius: 7px; background: #1b211b; color: #d9e2d3; font-size: 13px; }
+.quickBotSetup { display: grid; gap: 9px; padding: 13px; border: 1px solid #303a30; border-radius: 7px; background: #1b211b; color: #e3e9df; font-size: 12px; }
+.quickBotSetup label { display: flex; justify-content: space-between; color: #b8c2b0; }
+.quickBotSetup select { width: 100%; padding: 8px; border: 1px solid #303a30; border-radius: 5px; background: #111711; color: #e3e9df; }
+.quickBotSetup input[type="range"] { width: 100%; accent-color: var(--accent-green); }
+.quickBotSetup .timeGrid button { min-height: 62px; }
+.quickBotSetup .timeGrid button b { font-size: 17px; }
+.quickBotSetup .timeGrid button span { font-size: 12px; }
+.quickFriend > div { display: flex; gap: 6px; margin-top: 9px; }
+.quickFriend input { min-width: 0; width: 100%; padding: 9px; border: 1px solid #484440; border-radius: 5px; background: #1c1b19; color: #eee; }
+.quickFriend button { border: 0; border-radius: 5px; padding: 0 10px; background: #45413d; color: #eee; }
+.quickRecent { display: grid; gap: 8px; }
+.quickRecent { max-height: 320px; overflow-y: auto; }
+.quickRecent button { padding: 8px; border: 0; border-radius: 5px; background: #252d24; color: #e3e9df; text-align: left; font-size: 12px; }
+
+.gameShell { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); background: #101410; color: #f3f5ef; }
+.boardArea { width: 100%; }
+.boardArea { width: min(1480px, 100%); justify-self: center; }
+.topbar { width: min(1280px, 100%); border-color: #303a30; background: #171d17; }
+.gameStage { width: min(1280px, 100%); grid-template-columns: minmax(440px, 1fr) 320px; gap: 18px; }
+.boardColumn { gap: 8px; }
+.board { padding: 8px; border-color: #344033; background: #171d17; }
+.players { background: #202720; border-color: #303a30; }
+.players.active { border-color: var(--accent-green); box-shadow: inset 3px 0 0 var(--accent-green); }
+.analysisPanel { background: #171d17; border-color: #303a30; }
+@media (max-width: 1080px) {
+  .gameStage { grid-template-columns: minmax(0, 1fr) 280px; }
+}
+@media (max-width: 760px) {
+  .boardArea { padding: 12px; }
+  .gameStage { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .quickContent { grid-template-columns: 1fr minmax(0, 2fr); align-items: start; }
+  .quickIntro { grid-column: 1 / -1; }
+  .quickAbout { display: none; }
+}
+@media (max-width: 620px) {
+  .quickTopbar { padding: 0 16px; }
+  .quickBrand { font-size: 18px; }
+  .quickTopActions { gap: 8px; }
+  .quickContent { width: calc(100% - 28px); margin-top: 18px; grid-template-columns: 1fr; }
+  .quickIntro { padding: 0; }
+  .quickActions { grid-row: 3; }
+  .quickPicker .timeGrid button { min-height: 88px; }
+}
+
 @media (max-width: 1080px) {
   .shell {
     grid-template-columns: 280px minmax(360px, 1fr);
