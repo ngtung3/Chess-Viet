@@ -12,24 +12,27 @@ import {
   Handshake,
   History,
   MessageSquare,
+  Shuffle,
   Swords,
   Timer,
   UserCircle,
+  Users,
   Zap,
   Wifi
 } from 'lucide-react';
-import { getBestMove } from './lib/chessEngine';
+import { getBestMove, analyzeLines } from './lib/chessEngine';
 import './styles.css';
 
 const api = import.meta.env.VITE_API_URL || '/api';
 const socket = io(import.meta.env.VITE_WS_URL || '/', { transports: ['websocket'], autoConnect: false, reconnection: true });
 
 type User = { id: string; username: string; email?: string; rating: number; guest?: boolean };
-type TimeControl = 'bullet_1' | 'bullet_1_1' | 'bullet_2' | 
+type TimeControl = 'bullet_1' | 'bullet_1_1' | 'bullet_2_1' | 
                   'blitz_3' | 'blitz_3_1' | 'blitz_5' | 
                   'rapid_10' | 'rapid_15' | 'rapid_30' ;
 type PlayerColor = 'white' | 'black' | 'spectator';
 type BotSide = 'white' | 'black' | 'random';
+type RailMode = 'match' | 'bot';
 type PresencePerson = {
   userId: string;
   username?: string;
@@ -73,11 +76,11 @@ type GamePlayers = {
 };
 
 const timeControlOptions: Record<TimeControl, { label: string; group: 'Bullet' | 'Blitz' | 'Rapid'; initialTimeMs: number; incrementMs: number }> = {
-  bullet_1: { label: '1p', group: 'Bullet', initialTimeMs: 60000, incrementMs: 0 },
-  bullet_1_1: { label: '1p + 1', group: 'Bullet', initialTimeMs: 60000, incrementMs: 1000 },
-  bullet_2: { label: '2p', group: 'Bullet', initialTimeMs: 120000, incrementMs: 0 },
+  bullet_1: { label: '1 min', group: 'Bullet', initialTimeMs: 60000, incrementMs: 0 },
+  bullet_1_1: { label: '1 + 1 ', group: 'Bullet', initialTimeMs: 60000, incrementMs: 1000 },
+  bullet_2_1: { label: '2 + 1', group: 'Bullet', initialTimeMs: 120000, incrementMs: 1000 },
   blitz_3: { label: '3 min', group: 'Blitz', initialTimeMs: 180000, incrementMs: 0 },
-  blitz_3_1: { label: '3+1', group: 'Blitz', initialTimeMs: 180000, incrementMs: 1000 },
+  blitz_3_1: { label: '3 + 1', group: 'Blitz', initialTimeMs: 180000, incrementMs: 1000 },
   blitz_5: { label: '5 min', group: 'Blitz', initialTimeMs: 300000, incrementMs: 0 },
   rapid_10: { label: '10 min', group: 'Rapid', initialTimeMs: 600000, incrementMs: 0 },
   rapid_15: { label: '15 min', group: 'Rapid', initialTimeMs: 900000, incrementMs: 0 },
@@ -401,7 +404,9 @@ function App() {
   const [gamePlayers, setGamePlayers] = useState<GamePlayers>({});
   const [messages, setMessages] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
-  const [replay, setReplay] = useState<any[]>([]);
+  const [replay, setReplay] = useState<MoveTrackerItem[]>([]);
+  const [replayMode, setReplayMode] = useState(false);
+  const [replayIndex, setReplayIndex] = useState(0);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [moveTracker, setMoveTracker] = useState<MoveTrackerItem[]>([]);
@@ -413,7 +418,7 @@ function App() {
   const [botTimeControl, setBotTimeControl] = useState<TimeControl>('rapid_10');
   const [botSide, setBotSide] = useState<BotSide>('black');
   const [botElo, setBotElo] = useState(1200);
-  const [botSetupOpen, setBotSetupOpen] = useState(false);
+  const [railMode, setRailMode] = useState<RailMode>('match');
   const [gameStatus, setGameStatus] = useState('idle');
   const [matchmakingStatus, setMatchmakingStatus] = useState('Ready');
   const [searching, setSearching] = useState(false);
@@ -422,8 +427,24 @@ function App() {
   const [boardWidth, setBoardWidth] = useState(640);
   const [selectedSquare, setSelectedSquare] = useState('');
   const [moveSquares, setMoveSquares] = useState<Record<string, React.CSSProperties>>({});
+  const [premove, setPremove] = useState<{ from: string; to: string } | null>(null);
+  const [premoveSquares, setPremoveSquares] = useState<Record<string, React.CSSProperties>>({});
+  const [analysisLines, setAnalysisLines] = useState<{ evalText: string; moves: string }[]>([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  // const [analysis, setAnalysis] = useState<{ san: string; depth: number } | null>(null);
+  // const [analyzing, setAnalyzing] = useState(false);
+  const [panelTab, setPanelTab] = useState<'moves' | 'chat'>('moves');
   const gameIdRef = useRef(gameId);
   const gameStatusRef = useRef(gameStatus);
+
+  useEffect(() => {
+    if (!premove) return;
+    if (!canMoveNow()) return;
+    const { from, to } = premove;
+    setPremove(null);
+    setPremoveSquares({});
+    submitMove(from, to); 
+  }, [fen, playerColor, gameStatus]);
 
   useEffect(() => {
     gameStatusRef.current = gameStatus;
@@ -474,6 +495,8 @@ function App() {
     setAnalysisNotices([]);
     setSelectedSquare('');
     setMoveSquares({});
+    setPremove(null);
+    setPremoveSquares({});
     setWhiteTimeMs(clock);
     setBlackTimeMs(clock);
     setGamePlayers({});
@@ -632,7 +655,20 @@ function App() {
   }
 
   function onDrop(sourceSquare: string, targetSquare: string) {
-    return submitMove(sourceSquare, targetSquare);
+    if (replayMode) return false;
+    if (canMoveNow()) return submitMove(sourceSquare, targetSquare);
+    if (!user || playerColor === 'spectator' || isFinishedStatus(gameStatus)) return false;
+    setPremove({ from: sourceSquare, to: targetSquare });
+    setPremoveSquares({
+      [sourceSquare]: { background: 'rgba(66, 133, 244, 0.35)' },
+      [targetSquare]: { background: 'rgba(66, 133, 244, 0.35)' }
+    });
+    return false;
+  }
+
+  function cancelPremove() {
+    setPremove(null);
+    setPremoveSquares({});
   }
 
   function showMoveHints(square: string) {
@@ -658,6 +694,7 @@ function App() {
   }
 
   function onSquareClick(square: string) {
+    if (replayMode) return;
     if (!canMoveNow()) return;
     if (selectedSquare && selectedSquare !== square) {
       const legal = (chess.moves({ square: selectedSquare as any, verbose: true }) as any[]).some((move) => move.to === square);
@@ -720,25 +757,118 @@ function App() {
 
   async function resign() {
     await request(`/games/${gameId}/resign`, { method: 'POST', body: '{}' });
-    setGameStatus('resigned');
-  }
-
-  function returnToLobby() {
-    resetBoard(timeControl);
-    setSearching(false);
-    setMatchmakingStatus('Ready');
-    setGameStatus('idle');
   }
 
   async function offerDraw() {
     await request(`/games/${gameId}/draw`, { method: 'POST', body: JSON.stringify({ offer: true }) });
   }
 
-  async function loadReplay(id: string) {
-    const data = await request(`/replay/games/${id}/replay`);
-    setReplay(data.events || []);
-    setGameId(id);
+  async function loadReplay(g: any) {
+    const data = await request(`/replay/games/${g.id}/replay`);
+    const moves = (data.events || [])
+      .filter((e: any) => e.event_type === 'move.played')
+      .map((e: any) => e.payload) as MoveTrackerItem[];
+    setReplayMode(true);
+    setReplay(moves);
+    setReplayIndex(moves.length);
+    setGameId(g.id);
+    setGamePlayers({ whiteId: g.white_id, blackId: g.black_id, whiteName: g.white_name, blackName: g.black_name });
+    setMoveTracker(moves); // tái dùng đúng pipeline hiển thị Move Tracker đã có sẵn cho trận đấu thật
+    const lastFen = moves.length ? moves[moves.length - 1].fen : new Chess().fen();
+    chess.load(lastFen);
+    setFen(lastFen);
+    setGameStatus(`replay: ${g.result || 'finished'}`);
+    setPanelTab('moves');
   }
+
+  function replaySeek(index: number) {
+    const clamped = Math.max(0, Math.min(replay.length, index));
+    setReplayIndex(clamped);
+    const targetFen = clamped === 0 ? new Chess().fen() : replay[clamped - 1].fen;
+    chess.load(targetFen);
+    setFen(targetFen);
+    setMoveTracker(replay.slice(0, clamped));
+    setAnalysisLines([]);
+  }
+
+  async function analyzePosition() {
+    setAnalyzing(true);
+    setAnalysisLines([]);
+    try {
+      const lines = await analyzeLines(fen, 14, 3);
+      const sideToMove = fen.split(' ')[1];
+      setAnalysisLines(lines.map((line) => {
+        let evalText: string;
+        if (line.mate !== undefined) {
+          const mateFromWhite = sideToMove === 'w' ? line.mate : -line.mate;
+          evalText = `#${mateFromWhite}`;
+        } else {
+          const cpFromWhite = sideToMove === 'w' ? (line.scoreCp ?? 0) : -(line.scoreCp ?? 0);
+          evalText = `${cpFromWhite > 0 ? '+' : ''}${(cpFromWhite / 100).toFixed(2)}`;
+        }
+        return { evalText, moves: pvToSan(fen, line.pvUci) };
+      }));
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!replayMode) return;
+    const timer = window.setTimeout(() => {
+      analyzePosition();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [replayMode, fen]);
+
+  function pvToSan(startFen: string, uciMoves: string[]) {
+    const probe = new Chess(startFen);
+    const parts = startFen.split(' ');
+    let sideToMove = parts[1];
+    let fullmove = Number(parts[5] || 1);
+    const out: string[] = [];
+    for (const uci of uciMoves) {
+      if (sideToMove === 'w') out.push(`${fullmove}.`);
+      const result = probe.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.length > 4 ? uci.slice(4) : undefined });
+      if (!result) break;
+      out.push(result.san);
+      if (sideToMove === 'b') fullmove++;
+      sideToMove = sideToMove === 'w' ? 'b' : 'w';
+    }
+    return out.join(' ');
+  }
+
+  function exitReplay() {
+    setReplayMode(false);
+    setReplay([]);
+    setReplayIndex(0);
+    setAnalysis(null);
+    resetBoard();
+    setGameId('demo-room');
+  }
+
+  useEffect(() => {
+    if (!replayMode) return;
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return; 
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        replaySeek(replayIndex - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        replaySeek(replayIndex + 1);
+      } else if (e.key === 'ArrowUp' || e.key === 'Home') {
+        e.preventDefault();
+        replaySeek(0);
+      } else if (e.key === 'ArrowDown' || e.key === 'End') {
+        e.preventDefault();
+        replaySeek(replay.length);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [replayMode, replayIndex, replay.length]);
 
   async function inviteFriend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -767,7 +897,7 @@ function App() {
   }
 
   function playerCard(color: 'white' | 'black') {
-    const active = chess.turn() === (color === 'white' ? 'w' : 'b') && !isFinishedStatus(gameStatus) && gameStatus !== 'creating';
+    const active = chess.turn() === (color === 'white' ? 'w' : 'b') && gameStatus === 'active';
     const time = color === 'white' ? whiteTimeMs : blackTimeMs;
     return (
       <div className={`players ${active ? 'active' : ''}`}>
@@ -793,6 +923,13 @@ function App() {
     return rows;
   }, {});
 
+  function historyLabel(g: any) {
+    const myColor = g.white_id === user?.id ? 'white' : 'black';
+    const opponent = myColor === 'white' ? g.black_name || shortName(g.black_id) : g.white_name || shortName(g.white_id);
+    const result = g.result ? ` - ${g.result}` : '';
+    return `vs ${opponent}${result}`;
+  }
+
   function moveCountFromGame(g: any) {
     return Number(g.move_count || g.moves || g.moveNumber || 0);
   }
@@ -806,58 +943,56 @@ function App() {
 
   if (!user) return <AuthScreen onLogin={handleAuth} onRegister={handleAuth} onGuest={handleGuest} />;
 
-  // Once the lobby has handed off to a game, keep the gameplay controls visible
-  // even when the backend reports an intermediate status such as "started" or
-  // "move rejected". The backend may not use the exact UI status strings.
-  const hasGamePanel = gameStatus !== 'creating';
-  if (gameStatus === 'idle' || gameStatus === 'matchmaking failed' || gameStatus === 'Searching...') {
-    return (
-      <main className="quickLobby">
-        <header className="quickTopbar">
-          <a className="quickBrand" href="#"><span className="brandMark">♘</span> Chess Viet</a>
-          <div className="quickTopActions">
-            <span><UserCircle size={17} /> {user.username}{user.guest ? ' · Guest' : ''}</span>
-            {!user.guest && <button type="button" onClick={() => { localStorage.clear(); location.reload(); }}>Logout</button>}
-            {user.guest && <button type="button" onClick={() => { localStorage.clear(); location.reload(); }}>Exit guest</button>}
-          </div>
-        </header>
-        <section className="quickContent">
-          <aside className="quickIntro">
-            <h1>Ready to play?</h1>
-            <p>Choose a time control and find an opponent.</p>
-            <div className="quickInfo"><Wifi size={17} /> {connected ? 'Realtime online' : 'Reconnecting'}</div>
-            {!user.guest && <div className="quickInfo"><History size={17} /> {history.length} games played</div>}
-            <p className="quickAbout">Chess Viet · Online chess</p>
-          </aside>
-          <section className="quickPicker">
-            <div className="quickTab">Quick pairing</div>
-            <TimeControlPicker value={timeControl} onChange={setTimeControl} />
-            <button className="quickStart" onClick={findMatch} disabled={searching}>
-              <Swords size={18} /> {searching ? 'Searching...' : `Find ${timeControlOptions[timeControl].group} game`}
-            </button>
-            <p className={`quickStatus ${searching ? 'isSearching' : ''}`}>{matchmakingStatus}</p>
-          </section>
-          <aside className="quickActions">
-            <button type="button" onClick={() => setBotSetupOpen((open) => !open)}><Bot size={20} /> <span>Play against computer<small>Choose side and bot strength</small></span></button>
-            {botSetupOpen && <section className="quickBotSetup">
-              <b>Bot game settings</b>
-              <TimeControlPicker value={botTimeControl} onChange={setBotTimeControl} />
-              <label>Your side</label>
-              <select value={botSide} onChange={(event) => setBotSide(event.target.value as BotSide)}><option value="black">White</option><option value="white">Black</option><option value="random">Random</option></select>
-              <label>Bot strength <strong>{botElo}</strong></label>
-              <input type="range" min="400" max="2400" step="100" value={botElo} onChange={(event) => setBotElo(Number(event.target.value))} />
-              <button className="quickStart" type="button" onClick={startAiGame}>Start bot game</button>
-            </section>}
-            {!user.guest && <form className="quickFriend" onSubmit={inviteFriend}><label>Challenge a friend</label><div><input name="friendId" placeholder="Friend user ID" /><button>Invite</button></div></form>}
-            {!user.guest && <div className="quickRecent"><b>Match History</b>{history.length === 0 && <small>No games yet</small>}{history.map((g) => { const players = historyParticipants(g); const tc = (g.time_control || g.timeControl || 'rapid_10') as TimeControl; const option = timeControlOptions[tc] || timeControlOptions.rapid_10; return <button key={g.id} type="button" onClick={() => loadReplay(g.id)}>{players.white} vs {players.black}<small>{option.group} {option.label} · {moveCountFromGame(g)} moves · {g.status}</small></button>; })}</div>}
-          </aside>
-        </section>
-      </main>
-    );
-  }
+  const hasGamePanel = gameStatus === 'active' || gameStatus.startsWith('playing Stockfish') || moveTracker.length > 0 || isFinishedStatus(gameStatus);
+  const shellClass = user.guest ? 'shell guestShell' : 'shell';
 
   return (
-    <main className="gameShell">
+    <main className={shellClass}>
+      {!user.guest && (
+        <aside className="rail">
+          <div className="railBrand">
+            <h1>Chess Viet</h1>
+            <span>Realtime chess</span>
+          </div>
+          <div className="railModeTabs">
+            <button type="button" className={railMode === 'match' ? 'active' : ''} onClick={() => setRailMode('match')}><Swords size={18} /> Find Match</button>
+            <button type="button" className={railMode === 'bot' ? 'active' : ''} onClick={() => setRailMode('bot')}><Bot size={18} /> AI Bot</button>
+          </div>
+          <section className="railSetup">
+            {railMode === 'match' ? (
+              <>
+                <h2><Swords size={17} /> Online Match</h2>
+                <TimeControlPicker value={timeControl} onChange={setTimeControl} />
+                <button className="wide" onClick={findMatch} disabled={searching}>{searching ? 'Searching...' : 'Start Search'}</button>
+                <p className="statusLine">{matchmakingStatus}</p>
+              </>
+            ) : (
+              <>
+                <h2><Bot size={17} /> Bot Match</h2>
+                <TimeControlPicker value={botTimeControl} onChange={setBotTimeControl} />
+                <label className="fieldLabel">Your side</label>
+                <select value={botSide} onChange={(e) => setBotSide(e.target.value as BotSide)}>
+                  <option value="black">White</option>
+                  <option value="white">Black</option>
+                  <option value="random">Random</option>
+                </select>
+                <label className="fieldLabel">Bot Elo</label>
+                <div className="eloSlider">
+                  <input type="range" min="400" max="2400" step="100" value={botElo} onChange={(e) => setBotElo(Number(e.target.value))} />
+                  <strong>{botElo}</strong>
+                </div>
+                <button className="wide" onClick={startAiGame}><Shuffle size={16} /> Start Bot Game</button>
+              </>
+            )}
+          </section>
+          <section className="railFriend">
+            <h2><Users size={17} /> Friend Invite</h2>
+            <form onSubmit={inviteFriend}><input name="friendId" placeholder="Friend user id" /><button>Invite</button></form>
+          </section>
+          <button onClick={() => { localStorage.clear(); location.reload(); }}><Users size={18} /> Logout</button>
+        </aside>
+      )}
+
       <section className="boardArea">
         <div className="topbar">
           <span><Wifi size={16} /> {connected ? 'Realtime online' : 'Reconnecting'}</span>
@@ -897,6 +1032,17 @@ function App() {
           </div>}
         </div>
 
+        {user.guest && (
+          <section className="guestMatchBar">
+            <div>
+              <h2><Swords size={18} /> Find a guest game</h2>
+              <p>{matchmakingStatus}</p>
+            </div>
+            <TimeControlPicker value={timeControl} onChange={setTimeControl} />
+            <button className="wide" onClick={findMatch} disabled={searching}>{searching ? 'Searching...' : 'Find Match'}</button>
+          </section>
+        )}
+
         <div className={`gameStage ${!hasGamePanel ? 'boardOnly' : ''}`}>
           <div className="boardColumn">
             {hasGamePanel && playerCard(topColor)}
@@ -905,62 +1051,133 @@ function App() {
                 position={fen}
                 onPieceDrop={onDrop}
                 onSquareClick={onSquareClick}
+                onSquareRightClick={cancelPremove}
+                arePiecesDraggable={!replayMode}
                 boardOrientation={boardOrientation}
                 boardWidth={boardWidth}
-                customSquareStyles={moveSquares}
+                customSquareStyles={{ ...moveSquares, ...premoveSquares }}
                 customDarkSquareStyle={{ backgroundColor: '#779556' }}
                 customLightSquareStyle={{ backgroundColor: '#ebecd0' }}
               />
             </div>
             {hasGamePanel && playerCard(bottomColor)}
-            {hasGamePanel && <div className="actionbar">
-              {isFinishedStatus(gameStatus) ? <button onClick={returnToLobby}><History size={16} /> Return to main page</button> : <>
+            {replayMode && (
+              <div className="actionbar">
+                <button onClick={() => replaySeek(0)}>⏮ Start</button>
+                <button onClick={() => replaySeek(replayIndex - 1)}>◀ Prev</button>
+                <span>{replayIndex} / {replay.length}</span>
+                <button onClick={() => replaySeek(replayIndex + 1)}>Next ▶</button>
+                <button onClick={() => replaySeek(replay.length)}>End ⏭</button>
+                <button onClick={exitReplay}>✕ Exit replay</button>
+              </div>
+            )}
+            {hasGamePanel && !replayMode && (
+              <div className="actionbar">
                 <button onClick={resign}><Flag size={16} /> Resign</button>
                 <button onClick={offerDraw}><Handshake size={16} /> Draw</button>
-              </>}
-              <span>{gameStatus}</span>
-            </div>}
-
+                <span>{gameStatus}</span>
+              </div>
+            )}
+            {!user.guest && (
+            <section className="historyUnderBoard">
+              <h2><History size={18} /> Match History</h2>
+              <div className="historyStrip">
+                {history.length === 0 && <p className="emptyLine">No games yet</p>}
+                {history.map((g) => {
+                  const players = historyParticipants(g);
+                  const tc = (g.time_control || g.timeControl || 'rapid_10') as TimeControl;
+                  const option = timeControlOptions[tc] || timeControlOptions.rapid_10;
+                  return (
+                    <button className="historyCard" key={g.id} onClick={() => loadReplay(g)}>
+                      <span className="historyIcon"><TimeControlIcon group={option.group} /></span>
+                      <span className="historyPlayers"><b>{players.white}</b><b>{players.black}</b></span>
+                      <span className="historyMeta">{option.group} {option.label} · {moveCountFromGame(g)} moves · {g.status}</span>
+                      <strong>{g.result || '*'}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+            )}
           </div>
 
-          {hasGamePanel && <aside className="analysisPanel" style={{ height: boardWidth }}>
-            <h2><Swords size={18} /> Move Tracker</h2>
-            <div className="tracker chessTracker">
-              {trackerRows.length === 0 && <p className="emptyLine">No moves yet</p>}
-              {Object.entries(trackerPairs).map(([moveNo, pair]) => (
-                <div className="trackerPair" key={moveNo}>
-                  <b>{moveNo}</b>
-                  <span title={pair.white ? `${pair.white.side}: ${pair.white.from}-${pair.white.to}` : ''}>{pair.white?.san || ''}</span>
-                  <span title={pair.black ? `${pair.black.side}: ${pair.black.from}-${pair.black.to}` : ''}>{pair.black?.san || ''}</span>
+          {hasGamePanel && <aside 
+            className={`analysisPanel${replayMode ? ' replayPanel' : ''}`}
+            style={replayMode
+              ? { display: 'flex', flexDirection: 'column', height: 'auto', minHeight: 'calc(100vh - 160px)', maxHeight: 'calc(100vh - 100px)' }
+              : { height: boardWidth }}
+          >
+            {!replayMode && (
+              <div className="panelTabs">
+                <button type="button" className={panelTab === 'moves' ? 'active' : ''} onClick={() => setPanelTab('moves')}>
+                  <Swords size={16} /> Moves
+                </button>
+                <button type="button" className={panelTab === 'chat' ? 'active' : ''} onClick={() => setPanelTab('chat')}>
+                  <MessageSquare size={16} /> Chat
+                </button>
+              </div>
+            )}
+
+            {(replayMode || panelTab === 'moves') && (
+              <>
+                {replayMode && (
+                  <div className="engineBox">
+                    <div className="engineBoxHead">
+                      <span>Stockfish </span>
+                      {analyzing && <span className="engineSpinner">...</span>}
+                    </div>
+                    {analysisLines.map((line, i) => (
+                      <div className="engineLine" key={i}>
+                        <span className="engineEval">{line.evalText}</span>
+                        <span className="engineMoves">{line.moves}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div 
+                  className="tracker chessTracker"
+                  style={replayMode ? { maxHeight: 'none', flex: '1 1 auto', overflowY: 'auto' } : undefined}
+                >
+                  {trackerRows.length === 0 && <p className="emptyLine">No moves yet</p>}
+                  {Object.entries(trackerPairs).map(([moveNo, pair]) => (
+                    <div className="trackerPair" key={moveNo}>
+                      <b>{moveNo}</b>
+                      <span title={pair.white ? `${pair.white.side}: ${pair.white.from}-${pair.white.to}` : ''}>{pair.white?.san || ''}</span>
+                      <span title={pair.black ? `${pair.black.side}: ${pair.black.from}-${pair.black.to}` : ''}>{pair.black?.san || ''}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="evalBox">
-              <span>Material</span>
-              <strong>{trackerRows.length ? formatEval(trackerRows[trackerRows.length - 1].evalScore) : '0.0'}</strong>
-            </div>
-            <div className="analysisNotices">
-              {analysisNotices.map((notice) => (
-                <div className={`analysisNotice ${notice.type}`} key={notice.id}>
-                  <span>{notice.message}</span>
-                  {notice.type === 'draw' && (
-                    <button onClick={() => {
-                      request(`/games/${gameId}/draw`, { method: 'POST', body: JSON.stringify({ accept: true }) });
-                      setAnalysisNotices((items) => items.filter((item) => item.id !== notice.id));
-                    }}>
-                      Accept
-                    </button>
-                  )}
+                <div className="evalBox" >
+                  <span>Material</span>
+                  <strong>{trackerRows.length ? formatEval(trackerRows[trackerRows.length - 1].evalScore) : '0.0'}</strong>
                 </div>
-              ))}
-            </div>
-            <div className="analysisChat">
-              <h2><MessageSquare size={18} /> Chat</h2>
-              <div className="chat">{messages.map((m, i) => <p key={i}><b>{m.username || shortName(m.userId)}</b> {m.body}</p>)}</div>
-              <form onSubmit={sendMessage}><input name="message" placeholder="Message" /><button>Send</button></form>
-            </div>
-          </aside>}
+                <div className="analysisNotices">
+                  {analysisNotices.map((notice) => (
+                    <div className={`analysisNotice ${notice.type}`} key={notice.id}>
+                      <span>{notice.message}</span>
+                      {notice.type === 'draw' && (
+                        <button onClick={() => {
+                          request(`/games/${gameId}/draw`, { method: 'POST', body: JSON.stringify({ accept: true }) });
+                          setAnalysisNotices((items) => items.filter((item) => item.id !== notice.id));
+                        }}>
+                          Accept
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {!replayMode && panelTab === 'chat' && (
+              <div className="analysisChat">
+                <div className="chat">{messages.map((m, i) => <p key={i}><b>{m.username || shortName(m.userId)}</b> {m.body}</p>)}</div>
+                <form onSubmit={sendMessage}><input name="message" placeholder="Message" /><button>Send</button></form>
+              </div>
+            )}
+          </aside>}        
         </div>
+
       </section>
 
     </main>

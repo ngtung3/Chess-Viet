@@ -26,7 +26,7 @@ type AuthedRequest = express.Request & { user?: { id: string; username?: string;
 const timeControls: Record<string, { initialTimeMs: number; incrementMs: number }> = {
   bullet_1: { initialTimeMs: 60000, incrementMs: 0 },
   bullet_1_1: { initialTimeMs: 60000, incrementMs: 1000 },
-  bullet_2: { initialTimeMs: 120000, incrementMs: 0 },
+  bullet_2_1: { initialTimeMs: 120000, incrementMs: 1000 },
   blitz_3: { initialTimeMs: 180000, incrementMs: 0 },
   blitz_3_1: { initialTimeMs: 180000, incrementMs: 1000 },
   blitz_5: { initialTimeMs: 300000, incrementMs: 0 },

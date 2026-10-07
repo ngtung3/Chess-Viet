@@ -119,3 +119,56 @@ export const stockfish: StockfishController = {
 export function getBestMove(fen: string, depth = 4) {
   return stockfish.getBestMove(fen, depth);
 }
+
+export type AnalysisLine = { multipv: number; scoreCp?: number; mate?: number; pvUci: string[] };
+
+async function runAnalyzeLines(fen: string, depth: number, multiPv: number): Promise<AnalysisLine[]> {
+  const currentEngine = await getEngine();
+  const lines = new Map<number, AnalysisLine>();
+
+  return new Promise<AnalysisLine[]>((resolve) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      resolve([...lines.values()].sort((a, b) => a.multipv - b.multipv));
+    }, searchTimeoutMs * 2);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      currentEngine.worker.removeEventListener('message', onMessage);
+    };
+
+    const onMessage = (event: MessageEvent<string>) => {
+      const data = event.data;
+      if (typeof data !== 'string') return;
+      if (data.startsWith('info') && data.includes(' pv ')) {
+        const mpvMatch = data.match(/multipv (\d+)/);
+        const cpMatch = data.match(/score cp (-?\d+)/);
+        const mateMatch = data.match(/score mate (-?\d+)/);
+        const pvMatch = data.match(/ pv (.+)$/);
+        if (!mpvMatch || !pvMatch) return;
+        const multipv = Number(mpvMatch[1]);
+        lines.set(multipv, {
+          multipv,
+          scoreCp: cpMatch ? Number(cpMatch[1]) : undefined,
+          mate: mateMatch ? Number(mateMatch[1]) : undefined,
+          pvUci: pvMatch[1].trim().split(/\s+/).slice(0, 6)
+        });
+        return;
+      }
+      if (data.startsWith('bestmove')) {
+        cleanup();
+        resolve([...lines.values()].sort((a, b) => a.multipv - b.multipv));
+      }
+    };
+
+    currentEngine.worker.addEventListener('message', onMessage);
+    currentEngine.worker.postMessage(`setoption name MultiPV value ${multiPv}`);
+    currentEngine.worker.postMessage(`position fen ${fen}`);
+    currentEngine.worker.postMessage(`go depth ${Math.max(1, Math.min(16, depth))}`);
+  });
+}
+
+export function analyzeLines(fen: string, depth = 14, multiPv = 3) {
+  queue = queue.catch(() => undefined).then(() => runAnalyzeLines(fen, depth, multiPv));
+  return queue as Promise<AnalysisLine[]>;
+}
