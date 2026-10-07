@@ -27,9 +27,9 @@ const api = import.meta.env.VITE_API_URL || '/api';
 const socket = io(import.meta.env.VITE_WS_URL || '/', { transports: ['websocket'], autoConnect: false, reconnection: true });
 
 type User = { id: string; username: string; email?: string; rating: number; guest?: boolean };
-type TimeControl = 'bullet_1' | 'bullet_1_1' | 'bullet_2_1' | 
-                  'blitz_3' | 'blitz_3_1' | 'blitz_5' | 
-                  'rapid_10' | 'rapid_15' | 'rapid_30' ;
+type TimeControl = 'bullet_1' | 'bullet_1_1' | 'bullet_2_1' |
+  'blitz_3' | 'blitz_3_1' | 'blitz_5' |
+  'rapid_10' | 'rapid_15' | 'rapid_30';
 type PlayerColor = 'white' | 'black' | 'spectator';
 type BotSide = 'white' | 'black' | 'random';
 type RailMode = 'match' | 'bot';
@@ -431,8 +431,6 @@ function App() {
   const [premoveSquares, setPremoveSquares] = useState<Record<string, React.CSSProperties>>({});
   const [analysisLines, setAnalysisLines] = useState<{ evalText: string; moves: string }[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
-  // const [analysis, setAnalysis] = useState<{ san: string; depth: number } | null>(null);
-  // const [analyzing, setAnalyzing] = useState(false);
   const [panelTab, setPanelTab] = useState<'moves' | 'chat'>('moves');
   const gameIdRef = useRef(gameId);
   const gameStatusRef = useRef(gameStatus);
@@ -443,7 +441,7 @@ function App() {
     const { from, to } = premove;
     setPremove(null);
     setPremoveSquares({});
-    submitMove(from, to); 
+    submitMove(from, to);
   }, [fen, playerColor, gameStatus]);
 
   useEffect(() => {
@@ -842,7 +840,7 @@ function App() {
     setReplayMode(false);
     setReplay([]);
     setReplayIndex(0);
-    setAnalysis(null);
+    setAnalysisLines([]);
     resetBoard();
     setGameId('demo-room');
   }
@@ -851,7 +849,7 @@ function App() {
     if (!replayMode) return;
     function onKeyDown(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return; 
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         replaySeek(replayIndex - 1);
@@ -1079,29 +1077,29 @@ function App() {
               </div>
             )}
             {!user.guest && (
-            <section className="historyUnderBoard">
-              <h2><History size={18} /> Match History</h2>
-              <div className="historyStrip">
-                {history.length === 0 && <p className="emptyLine">No games yet</p>}
-                {history.map((g) => {
-                  const players = historyParticipants(g);
-                  const tc = (g.time_control || g.timeControl || 'rapid_10') as TimeControl;
-                  const option = timeControlOptions[tc] || timeControlOptions.rapid_10;
-                  return (
-                    <button className="historyCard" key={g.id} onClick={() => loadReplay(g)}>
-                      <span className="historyIcon"><TimeControlIcon group={option.group} /></span>
-                      <span className="historyPlayers"><b>{players.white}</b><b>{players.black}</b></span>
-                      <span className="historyMeta">{option.group} {option.label} · {moveCountFromGame(g)} moves · {g.status}</span>
-                      <strong>{g.result || '*'}</strong>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+              <section className="historyUnderBoard">
+                <h2><History size={18} /> Match History</h2>
+                <div className="historyStrip">
+                  {history.length === 0 && <p className="emptyLine">No games yet</p>}
+                  {history.map((g) => {
+                    const players = historyParticipants(g);
+                    const tc = (g.time_control || g.timeControl || 'rapid_10') as TimeControl;
+                    const option = timeControlOptions[tc] || timeControlOptions.rapid_10;
+                    return (
+                      <button className="historyCard" key={g.id} onClick={() => loadReplay(g)}>
+                        <span className="historyIcon"><TimeControlIcon group={option.group} /></span>
+                        <span className="historyPlayers"><b>{players.white}</b><b>{players.black}</b></span>
+                        <span className="historyMeta">{option.group} {option.label} · {moveCountFromGame(g)} moves · {g.status}</span>
+                        <strong>{g.result || '*'}</strong>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             )}
           </div>
 
-          {hasGamePanel && <aside 
+          {hasGamePanel && <aside
             className={`analysisPanel${replayMode ? ' replayPanel' : ''}`}
             style={replayMode
               ? { display: 'flex', flexDirection: 'column', height: 'auto', minHeight: 'calc(100vh - 160px)', maxHeight: 'calc(100vh - 100px)' }
@@ -1134,7 +1132,7 @@ function App() {
                     ))}
                   </div>
                 )}
-                <div 
+                <div
                   className="tracker chessTracker"
                   style={replayMode ? { maxHeight: 'none', flex: '1 1 auto', overflowY: 'auto' } : undefined}
                 >
@@ -1175,7 +1173,7 @@ function App() {
                 <form onSubmit={sendMessage}><input name="message" placeholder="Message" /><button>Send</button></form>
               </div>
             )}
-          </aside>}        
+          </aside>}
         </div>
 
       </section>
