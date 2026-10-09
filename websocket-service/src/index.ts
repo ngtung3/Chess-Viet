@@ -4,6 +4,7 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { Kafka } from 'kafkajs';
 import { createClient } from 'redis';
+import { randomUUID } from 'crypto';
 
 const service = 'websocket-service';
 const port = Number(process.env.PORT || 3005);
@@ -205,7 +206,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('chat:message', async (payload) => {
-    const event = { ...payload, userId: authedUser.id, username: authedUser.username, body: String(payload.body || '').slice(0, 500) };
+    const event = { ...payload, id: randomUUID, userId: authedUser.id, username: authedUser.username, body: String(payload.body || '').slice(0, 500) };
     await producer.send({ topic: 'chat.message.sent', messages: [{ key: event.roomId || event.gameId, value: JSON.stringify(event) }] }).catch(console.warn);
     io.to(`game:${event.gameId}`).emit('chat:message', event);
   });

@@ -455,6 +455,14 @@ function App() {
     return () => window.removeEventListener('resize', resize);
   }, []);
 
+  useEffect(() => {
+    if (!user || !gameId || gameId === 'demo-room') return;
+    fetch(`${api}/chat/rooms/${encodeURIComponent(gameId)}/messages`, { headers: token ? authHeaders(token) : guestHeaders(user) })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setMessages(rows.reverse().map((r: any) => ({ id: r.id, userId: r.user_id, username: r.username, body: r.body }))))
+      .catch(() => undefined);
+  }, [gameId, user?.id]);
+
   async function request(path: string, options: RequestInit = {}) {
     const headers = new Headers(token ? authHeaders(token) : guestHeaders(user));
     if (options.headers) {

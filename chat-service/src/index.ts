@@ -15,7 +15,8 @@ type AuthedRequest = express.Request & { user?: { id: string; username?: string 
 
 async function initDb() {
   await pool.query(`CREATE TABLE IF NOT EXISTS messages (
-    id VARCHAR(36) PRIMARY KEY, room_id VARCHAR(80), user_id VARCHAR(36), body VARCHAR(500), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(room_id)
+    id VARCHAR(36) PRIMARY KEY, room_id VARCHAR(80), user_id VARCHAR(80), username VARCHAR(80) NULL,
+    body VARCHAR(500), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(room_id)
   )`);
 }
 
@@ -63,13 +64,21 @@ app.post('/rooms/:roomId/messages', requireAuth, async (req: AuthedRequest, res)
 });
 
 async function main() {
-  await Promise.all([producer.connect().catch(() => undefined), consumer.connect().catch(() => undefined), retry('mysql', initDb)]);
-  await consumer.subscribe({ topic: 'chat.message.sent', fromBeginning: false }).catch(() => undefined);
-  await consumer.run({ eachMessage: async ({ message }) => {
-    if (!message.value) return;
-    const event = JSON.parse(message.value.toString());
-    if (event.id) await pool.execute('INSERT IGNORE INTO messages (id, room_id, user_id, body) VALUES (?, ?, ?, ?)', [event.id, event.roomId || event.gameId, event.userId, event.body]);
-  } }).catch(() => undefined);
+  await retry('mysql', initDb);
+  await retry('kafka', async () => { await producer.connect(); await consumer.connect(); });
+  await consumer.subscribe({ topic: 'chat.message.sent', fromBeginning: false });
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      if (!message.value) return;
+      try {
+        const event = JSON.parse(message.value.toString());
+        await pool.execute(
+          'INSERT IGNORE INTO messages (id, room_id, user_id, username, body) VALUES (?, ?, ?, ?, ?)',
+          [event.id || randomUUID(), event.roomId || event.gameId, event.userId, event.username || null, String(event.body || '').slice(0, 500)]
+        );
+      } catch (error) { console.error('chat save failed', error); }
+    }
+  });
   app.listen(port, () => console.log(`${service} listening on ${port}`));
 }
 main().catch((error) => { console.error(error); process.exit(1); });
