@@ -37,8 +37,10 @@ async function publish(topic: string, key: string, value: object) {
   }
 }
 
-async function applyGameResult(payload: { winnerId: string | null; loserId: string | null; 
-                                whiteId?: string; blackId?: string; result: string }) {
+async function applyGameResult(payload: {
+  winnerId: string | null; loserId: string | null;
+  whiteId?: string; blackId?: string; result: string
+}) {
   const K = 16;
   if (payload.winnerId && payload.loserId) {
     await pool.execute('UPDATE users SET rating = rating + ?, wins = wins + 1 WHERE id = ?', [K, payload.winnerId]);
@@ -186,6 +188,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 async function main() {
   await retry('mysql', initDb);
+  app.listen(port, () => console.log(`${service} listening on ${port}`));
   await producer.connect().catch(() => undefined);
   await consumer.connect().catch(() => undefined);
   await consumer.subscribe({ topic: 'game.finished', fromBeginning: false });
@@ -200,8 +203,15 @@ async function main() {
       }
     }
   });
-  app.listen(port, () => console.log(`${service} listening on ${port}`));
 }
+
+async function shutdown() {
+  await consumer.disconnect().catch(() => undefined);
+  await producer.disconnect().catch(() => undefined);
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 main().catch((error) => {
   console.error(error);

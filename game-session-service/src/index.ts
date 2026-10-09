@@ -155,14 +155,14 @@ function colorOf(playerId: string, state: Record<string, string>) {
   return null;
 }
 
-async function finishGame(gameId: string, state: Record<string, string>, reason: string, 
-                          winnerId: string | null, result: string, patch: Record<string, string> = {}) {
+async function finishGame(gameId: string, state: Record<string, string>, reason: string,
+  winnerId: string | null, result: string, patch: Record<string, string> = {}) {
   if (state.status === 'finished') return { gameId, winnerId, loserId: winnerId ? (winnerId === state.whiteId ? state.blackId : state.whiteId) : null, result, reason, fen: patch.fen || state.fen, pgn: patch.pgn || state.pgn || '' };
   const loserId = winnerId ? (winnerId === state.whiteId ? state.blackId : state.whiteId) : null;
-  const finished = { 
-    gameId, winnerId, loserId, result, reason, 
+  const finished = {
+    gameId, winnerId, loserId, result, reason,
     whiteId: state.whiteId, blackId: state.blackId,
-    fen: patch.fen || state.fen, pgn: patch.pgn || state.pgn || '' 
+    fen: patch.fen || state.fen, pgn: patch.pgn || state.pgn || ''
   };
   await redis.hSet(`game:${gameId}`, { ...patch, status: 'finished', winnerId: winnerId || '', result, finishReason: reason });
   await pool.execute('UPDATE games SET fen = ?, pgn = ?, status = ?, winner_id = ?, result = ?, finished_at = CURRENT_TIMESTAMP WHERE id = ?', [
@@ -426,13 +426,19 @@ async function main() {
   await Promise.all([retry('redis', () => redis.connect()), producer.connect().catch(() => undefined), consumer.connect().catch(() => undefined), retry('mysql', initDb)]);
   await consumer.subscribe({ topic: 'match.created', fromBeginning: true }).catch(() => undefined);
   await consumer.subscribe({ topic: 'move.validated', fromBeginning: false }).catch(() => undefined);
-  consumer.run({ eachMessage: async ({ topic, message }) => {
-    if (!message.value) return;
-    const event = JSON.parse(message.value.toString());
-    if (topic === 'match.created') await createGame(event);
-    if (topic === 'move.validated') await applyMove(event.gameId, event).catch(console.warn);
-  } }).catch(console.warn);
+  consumer.run({
+    eachMessage: async ({ topic, message }) => {
+      if (!message.value) return;
+      const event = JSON.parse(message.value.toString());
+      if (topic === 'match.created') await createGame(event);
+      if (topic === 'move.validated') await applyMove(event.gameId, event).catch(console.warn);
+    }
+  }).catch(console.warn);
   setInterval(() => tickTimers().catch(console.warn), 1000);
   app.listen(port, () => console.log(`${service} listening on ${port}`));
 }
 main().catch((error) => { console.error(error); process.exit(1); });
+process.on('SIGTERM', async () => {
+  await consumer.disconnect().catch(() => undefined);
+  process.exit(0);
+});

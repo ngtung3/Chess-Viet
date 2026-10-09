@@ -65,6 +65,7 @@ app.post('/rooms/:roomId/messages', requireAuth, async (req: AuthedRequest, res)
 
 async function main() {
   await retry('mysql', initDb);
+  app.listen(port, () => console.log(`${service} listening on ${port}`));
   await retry('kafka', async () => { await producer.connect(); await consumer.connect(); });
   await consumer.subscribe({ topic: 'chat.message.sent', fromBeginning: false });
   await consumer.run({
@@ -79,6 +80,14 @@ async function main() {
       } catch (error) { console.error('chat save failed', error); }
     }
   });
-  app.listen(port, () => console.log(`${service} listening on ${port}`));
 }
+
+async function shutdown() {
+  await consumer.disconnect().catch(() => undefined);
+  await producer.disconnect().catch(() => undefined);
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
 main().catch((error) => { console.error(error); process.exit(1); });
