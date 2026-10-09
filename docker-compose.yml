@@ -2,6 +2,7 @@ services:
   # Frontend
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -13,28 +14,40 @@ services:
   # API Gateway
   api-gateway:
     build: ./api-gateway
+    restart: unless-stopped
     ports:
       - "80:80"
     volumes:
       - ./api-gateway/nginx/conf:/etc/nginx/conf.d
       - ./api-gateway/nginx/html:/usr/share/nginx/html
     depends_on:
-      - frontend
-      - auth-service
-      - matchmaking-service
-      - game-session-service
-      - move-validation-service
-      - websocket-service
-      - notification-service
-      - chat-service
-      - replay-service
-      - ai-bot-service
+      frontend:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      matchmaking-service:
+        condition: service_started
+      game-session-service:
+        condition: service_started
+      move-validation-service:
+        condition: service_started
+      websocket-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      chat-service:
+        condition: service_started
+      replay-service:
+        condition: service_started
+      ai-bot-service:
+        condition: service_started
     networks:
       - chess-network
 
   # Services
   auth-service:
     build: ./auth-service
+    restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
@@ -47,14 +60,18 @@ services:
       - REDIS_HOST=redis
       - KAFKA_BROKERS=kafka:9092
     depends_on:
-      - mysql
-      - redis
-      - kafka
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - chess-network
 
   matchmaking-service:
     build: ./matchmaking-service
+    restart: unless-stopped
     ports:
       - "3002:3002"
     environment:
@@ -67,14 +84,18 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - JWT_SECRET=dev-secret-change-me
     depends_on:
-      - mysql
-      - redis
-      - kafka
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - chess-network
 
   game-session-service:
     build: ./game-session-service
+    restart: unless-stopped
     ports:
       - "3003:3003"
     environment:
@@ -87,26 +108,32 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - JWT_SECRET=dev-secret-change-me
     depends_on:
-      - mysql
-      - redis
-      - kafka
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - chess-network
 
   move-validation-service:
     build: ./move-validation-service
+    restart: unless-stopped
     ports:
       - "3004:3004"
     environment:
       - KAFKA_BROKERS=kafka:9092
       - JWT_SECRET=dev-secret-change-me
     depends_on:
-      - kafka
+      kafka:
+        condition: service_started
     networks:
       - chess-network
 
   websocket-service:
     build: ./websocket-service
+    restart: unless-stopped
     ports:
       - "3005:3005"
     environment:
@@ -114,24 +141,29 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - JWT_SECRET=dev-secret-change-me
     depends_on:
-      - redis
-      - kafka
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - chess-network
 
   notification-service:
     build: ./notification-service
+    restart: unless-stopped
     ports:
       - "3007:3007"
     environment:
       - KAFKA_BROKERS=kafka:9092
     depends_on:
-      - kafka
+      kafka:
+        condition: service_started
     networks:
       - chess-network
 
   chat-service:
     build: ./chat-service
+    restart: unless-stopped
     ports:
       - "3009:3009"
     environment:
@@ -143,13 +175,16 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - JWT_SECRET=dev-secret-change-me
     depends_on:
-      - mysql
-      - kafka
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - chess-network
 
   replay-service:
     build: ./replay-service
+    restart: unless-stopped
     ports:
       - "3010:3010"
     environment:
@@ -160,24 +195,34 @@ services:
       - DB_PASSWORD=chess_password
       - JWT_SECRET=dev-secret-change-me
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     networks:
       - chess-network
 
   ai-bot-service:
     build: ./ai-bot-service
+    restart: unless-stopped
     ports:
       - "3011:3011"
     environment:
       - KAFKA_BROKERS=kafka:9092
     depends_on:
-      - kafka
+      kafka:
+        condition: service_started
     networks:
       - chess-network
 
   # Databases
   mysql:
     image: mysql:8.0
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot_password --silent" ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     environment:
       MYSQL_ROOT_PASSWORD: root_password
       MYSQL_USER: chess_user
@@ -192,6 +237,12 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     ports:
       - "6379:6379"
     volumes:
@@ -204,6 +255,7 @@ services:
   # Message Queue
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.2
+    restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -212,8 +264,10 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.3.2
+    restart: unless-stopped
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_started
     ports:
       - "9092:9092"
     environment:
@@ -230,6 +284,7 @@ services:
   # Monitoring
   prometheus:
     image: prom/prometheus:latest
+    restart: unless-stopped
     ports:
       - "9090:9090"
     volumes:
@@ -245,6 +300,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    restart: unless-stopped
     ports:
       - "3008:3000"
     environment:
@@ -253,10 +309,10 @@ services:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_started
     networks:
       - chess-network
-
   # Connect các service khác ...
   # jaeger:
   #   image: jaegertracing/all-in-one:latest
