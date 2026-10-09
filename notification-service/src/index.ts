@@ -47,3 +47,7 @@ async function main() {
   app.listen(port, () => console.log(`${service} listening on ${port}`));
 }
 main().catch((error) => { console.error(error); process.exit(1); });
+process.on('SIGTERM', async () => {
+  await consumer.disconnect().catch(() => undefined);
+  process.exit(0);
+});
