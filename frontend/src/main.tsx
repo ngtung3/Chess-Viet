@@ -6,6 +6,7 @@ import { io } from 'socket.io-client';
 import {
   Bell,
   Bot,
+  BookOpen,
   Rocket,
   Clock,
   Flag,
@@ -193,6 +194,41 @@ function TimeControlPicker({ value, onChange }: { value: TimeControl; onChange: 
         </button>
       ))}
     </div>
+  );
+}
+
+function ChessRulesPage() {
+  return (
+    <section className="rulesPage">
+      <div className="rulesHero">
+        <span className="rulesEyebrow"><BookOpen size={16} /> Hướng dẫn cơ bản</span>
+        <h1>Luật chơi cờ vua</h1>
+        <p>Nắm những quy tắc quan trọng để bắt đầu một ván cờ tự tin hơn.</p>
+      </div>
+
+      <div className="rulesGrid">
+        <article className="rulesCard rulesCardWide">
+          <span className="rulesNumber">01</span>
+          <div><h2>Mục tiêu của ván cờ</h2><p>Hai người chơi lần lượt di chuyển quân Trắng và quân Đen. Mục tiêu là chiếu hết vua đối phương — đặt vua vào thế bị bắt và không còn nước đi hợp lệ để thoát.</p></div>
+        </article>
+        <article className="rulesCard">
+          <span className="rulesNumber">02</span>
+          <div><h2>Bàn cờ và lượt đi</h2><p>Bàn cờ có 8 × 8 ô. Trắng luôn đi trước, sau đó hai bên thay phiên nhau một nước. Không được bỏ qua lượt hoặc tự đặt vua mình vào thế bị chiếu.</p></div>
+        </article>
+        <article className="rulesCard">
+          <span className="rulesNumber">03</span>
+          <div><h2>Cách đi của quân cờ</h2><ul><li><strong>Tốt:</strong> đi thẳng một ô, ăn chéo; ở vị trí ban đầu có thể đi hai ô.</li><li><strong>Xe:</strong> đi ngang hoặc dọc.</li><li><strong>Mã:</strong> đi hình chữ L và có thể nhảy qua quân khác.</li><li><strong>Tượng:</strong> đi theo đường chéo.</li><li><strong>Hậu:</strong> đi ngang, dọc hoặc chéo.</li><li><strong>Vua:</strong> đi một ô theo mọi hướng.</li></ul></div>
+        </article>
+        <article className="rulesCard">
+          <span className="rulesNumber">04</span>
+          <div><h2>Nước đi đặc biệt</h2><p><strong>Nhập thành:</strong> vua và xe cùng di chuyển trong một nước hợp lệ. <strong>Phong cấp:</strong> tốt đến hàng cuối được đổi thành hậu, xe, tượng hoặc mã. <strong>Bắt tốt qua đường:</strong> có thể thực hiện ngay sau khi tốt đối phương đi hai ô vượt qua ô bị khống chế.</p></div>
+        </article>
+        <article className="rulesCard rulesCardWide rulesCardAccent">
+          <span className="rulesNumber">05</span>
+          <div><h2>Chiếu, chiếu hết và hòa</h2><p><strong>Chiếu</strong> là khi vua đang bị tấn công. Người chơi phải giải chiếu ngay. Ván cờ hòa khi không bên nào có thể chiếu hết, hoặc khi rơi vào bế tắc, lặp lại thế cờ, thỏa thuận hòa hay không đủ quân để chiếu hết.</p></div>
+        </article>
+      </div>
+    </section>
   );
 }
 
@@ -429,6 +465,7 @@ function App() {
   const [analysisLines, setAnalysisLines] = useState<{ evalText: string; moves: string }[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [panelTab, setPanelTab] = useState<'moves' | 'chat'>('moves');
+  const [homeTab, setHomeTab] = useState<'play' | 'rules'>('play');
   const gameIdRef = useRef(gameId);
   const gameStatusRef = useRef(gameStatus);
 
@@ -956,13 +993,17 @@ function App() {
       <main className="quickLobby">
         <header className="quickTopbar">
           <a className="quickBrand" href="#"><span className="brandMark">♘</span> Chess Viet</a>
+          <nav className="quickNav" aria-label="Trang chủ">
+            <button type="button" className={homeTab === 'play' ? 'active' : ''} onClick={() => setHomeTab('play')}><Swords size={15} /> Chơi cờ</button>
+            <button type="button" className={homeTab === 'rules' ? 'active' : ''} onClick={() => setHomeTab('rules')}><BookOpen size={15} /> Luật chơi</button>
+          </nav>
           <div className="quickTopActions">
             <span><UserCircle size={17} /> {user.username}{user.guest ? ' · Guest' : ''}</span>
             {!user.guest && <button type="button" onClick={() => { localStorage.clear(); location.reload(); }}>Logout</button>}
             {user.guest && <button type="button" onClick={() => { localStorage.clear(); location.reload(); }}>Exit guest</button>}
           </div>
         </header>
-        <section className="quickContent">
+        {homeTab === 'rules' ? <ChessRulesPage /> : <section className="quickContent">
           <aside className="quickIntro">
             <h1>Ready to play?</h1>
             <p>Choose a time control and find an opponent.</p>
@@ -992,7 +1033,7 @@ function App() {
             {!user.guest && <form className="quickFriend" onSubmit={inviteFriend}><label>Challenge a friend</label><div><input name="friendId" placeholder="Friend user ID" /><button>Invite</button></div></form>}
             {!user.guest && <div className="quickRecent"><b>Match History</b>{history.length === 0 && <small>No games yet</small>}{history.map((g) => { const players = historyParticipants(g); const tc = (g.time_control || g.timeControl || 'rapid_10') as TimeControl; const option = timeControlOptions[tc] || timeControlOptions.rapid_10; return <button key={g.id} type="button" onClick={() => loadReplay(g.id)}>{players.white} vs {players.black}<small>{option.group} {option.label} · {moveCountFromGame(g)} moves · {g.status}</small></button>; })}</div>}
           </aside>
-        </section>
+        </section>}
       </main>
     );
   }

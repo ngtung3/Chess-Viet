@@ -1111,6 +1111,9 @@ pre {
 
 .quickBrand { display: inline-flex; align-items: center; gap: 11px; color: #e5ebe1; text-decoration: none; font-size: 22px; }
 .brandMark { font-size: 31px; color: #aaa6a0; }
+.quickNav { display: flex; align-self: stretch; align-items: stretch; gap: 6px; margin-left: auto; margin-right: 32px; }
+.quickNav button { display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #aaa6a0; font-size: 13px; font-weight: 700; }
+.quickNav button:hover, .quickNav button.active { color: #dcebcf; border-bottom-color: var(--accent-green); }
 .quickTopActions, .quickTopActions span { display: flex; align-items: center; gap: 16px; color: #aaa6a0; font-size: 13px; }
 .quickTopActions span { gap: 7px; }
 .quickTopActions button { border: 0; background: none; color: #7db8e8; font-weight: 700; }
@@ -1152,6 +1155,22 @@ pre {
 .quickRecent { max-height: 320px; overflow-y: auto; }
 .quickRecent button { padding: 8px; border: 0; border-radius: 5px; background: #252d24; color: #e3e9df; text-align: left; font-size: 12px; }
 
+.rulesPage { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 54px 0 72px; }
+.rulesHero { max-width: 680px; margin-bottom: 30px; }
+.rulesEyebrow { display: inline-flex; align-items: center; gap: 8px; color: #a8cd83; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.rulesHero h1 { margin: 12px 0 8px; color: #eef4e9; font-size: clamp(30px, 5vw, 48px); line-height: 1.05; letter-spacing: -.04em; }
+.rulesHero p { margin: 0; color: #a9b4a2; font-size: 15px; line-height: 1.6; }
+.rulesGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.rulesCard { display: flex; gap: 18px; min-height: 180px; padding: 24px; border: 1px solid #303a30; border-radius: 10px; background: rgba(32, 39, 32, .86); }
+.rulesCardWide { grid-column: span 2; min-height: 150px; }
+.rulesCardAccent { background: linear-gradient(135deg, rgba(47, 67, 42, .95), rgba(32, 39, 32, .9)); border-color: #526f42; }
+.rulesNumber { flex: 0 0 auto; color: #81a94f; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+.rulesCard h2 { margin: 0 0 9px; color: #e3eadf; font-size: 17px; }
+.rulesCard p, .rulesCard li { color: #aeb8aa; font-size: 13px; line-height: 1.65; }
+.rulesCard p { margin: 0; }
+.rulesCard ul { display: grid; gap: 3px; margin: 0; padding-left: 18px; }
+.rulesCard strong { color: #dcebcf; }
+
 .gameShell { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); background: #101410; color: #f3f5ef; }
 .boardArea { width: 100%; }
 .boardArea { width: min(1480px, 100%); justify-self: center; }
@@ -1178,11 +1197,18 @@ pre {
 @media (max-width: 620px) {
   .quickTopbar { padding: 0 16px; }
   .quickBrand { font-size: 18px; }
+  .quickNav { margin-right: 8px; }
+  .quickNav button { padding: 0 5px; }
+  .quickNav button svg { display: none; }
   .quickTopActions { gap: 8px; }
   .quickContent { width: calc(100% - 28px); margin-top: 18px; grid-template-columns: 1fr; }
   .quickIntro { padding: 0; }
   .quickActions { grid-row: 3; }
   .quickPicker .timeGrid button { min-height: 88px; }
+  .rulesPage { width: calc(100% - 28px); padding-top: 32px; }
+  .rulesGrid { grid-template-columns: 1fr; }
+  .rulesCardWide { grid-column: auto; }
+  .rulesCard { padding: 20px; }
 }
 
 @media (max-width: 1080px) {
